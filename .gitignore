@@ -1,0 +1,32 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# PHP dependencies
+/vendor/
+/composer.phar
+
+# Logs and cache
+*.log
+*.cache
+/cache/
+/tmp/
+
+# IDE/editor settings
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# PHPUnit
+.phpunit.result.cache
+
+# Node (if frontend assets are added)
+node_modules/
