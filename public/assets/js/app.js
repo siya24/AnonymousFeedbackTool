@@ -20,29 +20,37 @@ async function api(url, options = {}) {
     return data;
 }
 
-function initTabs() {
-    const buttons = document.querySelectorAll('.tabs button');
-    if (!buttons.length) {
-        return;
-    }
-
-    buttons.forEach((btn) => {
-        btn.addEventListener('click', () => {
-            buttons.forEach((b) => b.classList.remove('active'));
-            btn.classList.add('active');
-            document.querySelectorAll('.tab-content').forEach((tab) => tab.classList.remove('active'));
-            byId('tab-' + btn.dataset.tab).classList.add('active');
-        });
-    });
+function showNotification(message, type = 'success') {
+    const alertClass = `alert alert-${type}`;
+    const alertHTML = `<div class="${alertClass} alert-dismissible fade show" role="alert">
+        <i class="fas fa-check-circle me-2"></i>${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>`;
+    const container = document.createElement('div');
+    container.innerHTML = alertHTML;
+    document.body.insertBefore(container.firstElementChild, document.body.firstChild);
+    setTimeout(() => {
+        document.querySelector('.alert')?.remove();
+    }, 5000);
 }
 
 function renderTable(rows) {
     if (!rows.length) {
-        return '<p>No records found.</p>';
+        return '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i>No records found.</div>';
     }
-    const head = '<tr><th>Date</th><th>Reference</th><th>Category</th><th>Status</th><th>Summary</th><th>Outcome</th></tr>';
-    const body = rows.map((r) => `<tr><td>${r.created_at || ''}</td><td>${r.reference_no || ''}</td><td>${r.category || ''}</td><td>${r.status || ''}</td><td>${r.anonymized_summary || ''}</td><td>${r.outcome_comments || ''}</td></tr>`).join('');
-    return `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+    const head = '<tr><th><i class="fas fa-calendar me-1"></i>Date</th><th><i class="fas fa-id-card me-1"></i>Reference</th><th><i class="fas fa-tag me-1"></i>Category</th><th><i class="fas fa-info-circle me-1"></i>Status</th><th><i class="fas fa-file-text me-1"></i>Summary</th><th><i class="fas fa-check me-1"></i>Outcome</th></tr>';
+    const body = rows.map((r) => {
+        const statusBadge = `<span class="badge" style="background-color: ${r.status === 'Investigation completed' ? '#9d2722' : '#008AC4'}">${r.status || ''}</span>`;
+        return `<tr>
+            <td>${r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}</td>
+            <td><strong>${r.reference_no || ''}</strong></td>
+            <td>${r.category || ''}</td>
+            <td>${statusBadge}</td>
+            <td>${(r.anonymized_summary || '').substring(0, 50)}...</td>
+            <td>${(r.outcome_comments || '').substring(0, 50)}...</td>
+        </tr>`;
+    }).join('');
+    return `<div class="table-responsive"><table class="table table-striped table-hover"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
 }
 
 function initPublicForms() {
@@ -57,9 +65,12 @@ function initPublicForms() {
                     method: 'POST',
                     body: new FormData(newForm),
                 });
-                out.textContent = JSON.stringify(data, null, 2);
+                showNotification('Feedback submitted successfully!', 'success');
+                out.classList.add('d-none');
                 newForm.reset();
             } catch (err) {
+                showNotification(err.message, 'danger');
+                out.classList.remove('d-none');
                 out.textContent = err.message;
             }
         });
@@ -74,9 +85,12 @@ function initPublicForms() {
                     method: 'POST',
                     body: new FormData(followupForm),
                 });
-                out.textContent = JSON.stringify(data, null, 2);
+                showNotification('Follow-up submitted successfully!', 'success');
+                out.classList.add('d-none');
                 followupForm.reset();
             } catch (err) {
+                showNotification(err.message, 'danger');
+                out.classList.remove('d-none');
                 out.textContent = err.message;
             }
         });
@@ -93,9 +107,13 @@ function initPublicForms() {
             }
             try {
                 const data = await api('/api/feedback/' + encodeURIComponent(reference));
+                lookupOut.classList.remove('d-none');
                 lookupOut.textContent = JSON.stringify(data, null, 2);
+                showNotification('Case retrieved successfully!', 'success');
             } catch (err) {
+                lookupOut.classList.remove('d-none');
                 lookupOut.textContent = err.message;
+                showNotification(err.message, 'danger');
             }
         });
     }
@@ -114,12 +132,12 @@ function initPublicForms() {
             try {
                 await load();
             } catch (err) {
-                reportTable.textContent = err.message;
+                reportTable.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${err.message}</div>`;
             }
         });
 
         load().catch(() => {
-            reportTable.textContent = 'Could not load reports.';
+            reportTable.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-circle me-2"></i>Could not load reports.</div>';
         });
     }
 }
@@ -145,8 +163,13 @@ function initHrPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
-            hrOutput.textContent = JSON.stringify(data, null, 2);
+            showNotification('Logged in successfully!', 'success');
+            logoutBtn.style.display = 'block';
+            loginForm.password.value = '';
+            hrOutput.classList.add('d-none');
         } catch (err) {
+            showNotification('Login failed: ' + err.message, 'danger');
+            hrOutput.classList.remove('d-none');
             hrOutput.textContent = err.message;
         }
     });
@@ -154,8 +177,14 @@ function initHrPage() {
     logoutBtn?.addEventListener('click', async () => {
         try {
             const data = await api('/api/hr/logout', { method: 'POST' });
-            hrOutput.textContent = JSON.stringify(data, null, 2);
+            showNotification('Logged out successfully!', 'success');
+            logoutBtn.style.display = 'none';
+            casesTable.innerHTML = '';
+            updateForm.reset();
+            hrOutput.classList.add('d-none');
         } catch (err) {
+            showNotification(err.message, 'danger');
+            hrOutput.classList.remove('d-none');
             hrOutput.textContent = err.message;
         }
     });
@@ -171,7 +200,7 @@ function initHrPage() {
         try {
             await loadCases();
         } catch (err) {
-            casesTable.textContent = err.message;
+            casesTable.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${err.message}</div>`;
         }
     });
 
@@ -180,7 +209,7 @@ function initHrPage() {
         const formData = new FormData(updateForm);
         const ref = (formData.get('reference_no') || '').toString().trim();
         if (!ref) {
-            hrOutput.textContent = 'Reference is required.';
+            showNotification('Reference is required.', 'warning');
             return;
         }
 
@@ -201,16 +230,18 @@ function initHrPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
-            hrOutput.textContent = JSON.stringify(data, null, 2);
+            showNotification('Case updated successfully!', 'success');
+            hrOutput.classList.add('d-none');
             await loadCases();
         } catch (err) {
+            showNotification(err.message, 'danger');
+            hrOutput.classList.remove('d-none');
             hrOutput.textContent = err.message;
         }
     });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    initTabs();
     initPublicForms();
     initHrPage();
 });
