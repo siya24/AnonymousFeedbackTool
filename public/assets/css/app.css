@@ -1,0 +1,115 @@
+:root {
+    --bg: #f3f1ea;
+    --panel: #fffdfa;
+    --text: #202020;
+    --brand: #0f5f4b;
+    --accent: #da5b2b;
+    --line: #ded8c8;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: "Trebuchet MS", "Gill Sans", sans-serif;
+    color: var(--text);
+    background: linear-gradient(135deg, #f8f6ef 0%, #ece8da 100%);
+}
+
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: #11392f;
+    color: #fff;
+}
+
+.topbar nav a {
+    color: #fff;
+    text-decoration: none;
+    margin-left: 14px;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+.panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 18px;
+}
+
+.support {
+    border-left: 5px solid var(--accent);
+    padding-left: 10px;
+}
+
+.tabs { display: flex; gap: 10px; margin: 12px 0; }
+.tabs button {
+    border: 1px solid var(--line);
+    background: #fff;
+    padding: 8px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+}
+.tabs button.active {
+    background: var(--brand);
+    color: #fff;
+}
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+form { display: grid; gap: 10px; margin: 10px 0 18px; }
+label { font-weight: 600; }
+input, select, textarea, button {
+    width: 100%;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid #c8bea9;
+}
+
+button {
+    background: var(--brand);
+    color: #fff;
+    cursor: pointer;
+    border: 0;
+    font-weight: 600;
+}
+
+.inline-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
+}
+
+.grid-2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+}
+
+.output {
+    background: #141414;
+    color: #d9ffd9;
+    border-radius: 10px;
+    padding: 10px;
+    min-height: 70px;
+    white-space: pre-wrap;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+th, td {
+    border-bottom: 1px solid var(--line);
+    padding: 8px;
+    font-size: 14px;
+    text-align: left;
+}

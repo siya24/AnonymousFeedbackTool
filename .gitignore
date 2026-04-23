@@ -34,3 +34,13 @@ node_modules/
 # Project documents kept locally
 Functional Requirements Document - Anonymous Feedback_V0.1.docx
 User Story Anonymous Feedback tool140925.docx
+
+# Runtime application data
+data/*.sqlite
+data/.app_key
+uploads/*
+!uploads/.gitkeep
+!data/.gitkeep
+
+# Temporary extraction folder
+.tmp_req/
