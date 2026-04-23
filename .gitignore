@@ -30,3 +30,7 @@ Thumbs.db
 
 # Node (if frontend assets are added)
 node_modules/
+
+# Project documents kept locally
+Functional Requirements Document - Anonymous Feedback_V0.1.docx
+User Story Anonymous Feedback tool140925.docx
