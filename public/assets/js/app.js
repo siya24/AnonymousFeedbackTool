@@ -1,9 +1,24 @@
 const byId = (id) => document.getElementById(id);
+const API_BASE = '/api';
+
+// JWT Token management
+const TokenManager = {
+    getToken: () => localStorage.getItem('hr_token'),
+    setToken: (token) => localStorage.setItem('hr_token', token),
+    clearToken: () => localStorage.removeItem('hr_token'),
+    hasToken: () => !!localStorage.getItem('hr_token')
+};
 
 async function api(url, options = {}) {
     const response = await fetch(url, {
         credentials: 'same-origin',
         ...options,
+        headers: {
+            ...options.headers,
+            ...(TokenManager.hasToken() && {
+                'Authorization': `Bearer ${TokenManager.getToken()}`
+            })
+        }
     });
 
     let data = {};
@@ -53,6 +68,28 @@ function renderTable(rows) {
     return `<div class="table-responsive"><table class="table table-striped table-hover"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
 }
 
+function renderHrCasesTable(rows) {
+    if (!rows.length) {
+        return '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i>No feedback cases found.</div>';
+    }
+
+    const head = '<tr><th>Date</th><th>Reference</th><th>Category</th><th>Status</th><th>Priority</th><th>Action</th></tr>';
+    const body = rows.map((r) => {
+        const reference = r.reference_no || '';
+        const href = `/hr/cases/${encodeURIComponent(reference)}`;
+        return `<tr>
+            <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
+            <td><strong>${reference}</strong></td>
+            <td>${r.category || ''}</td>
+            <td>${r.status || ''}</td>
+            <td>${r.priority || ''}</td>
+            <td><a class="btn btn-sm btn-outline-primary" href="${href}"><i class="fas fa-arrow-right me-1"></i>Open</a></td>
+        </tr>`;
+    }).join('');
+
+    return `<table class="table table-striped table-hover"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+
 function initPublicForms() {
     const out = byId('global-output');
 
@@ -61,7 +98,7 @@ function initPublicForms() {
         newForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             try {
-                const data = await api('/api/feedback', {
+                const data = await api(`${API_BASE}/feedback`, {
                     method: 'POST',
                     body: new FormData(newForm),
                 });
@@ -81,7 +118,7 @@ function initPublicForms() {
         followupForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             try {
-                const data = await api('/api/feedback/update', {
+                const data = await api(`${API_BASE}/feedback/update`, {
                     method: 'POST',
                     body: new FormData(followupForm),
                 });
@@ -106,7 +143,7 @@ function initPublicForms() {
                 return;
             }
             try {
-                const data = await api('/api/feedback/' + encodeURIComponent(reference));
+                const data = await api(`${API_BASE}/feedback/${encodeURIComponent(reference)}`);
                 lookupOut.classList.remove('d-none');
                 lookupOut.textContent = JSON.stringify(data, null, 2);
                 showNotification('Case retrieved successfully!', 'success');
@@ -123,7 +160,7 @@ function initPublicForms() {
     if (reportFilter) {
         const load = async () => {
             const params = new URLSearchParams(new FormData(reportFilter));
-            const data = await api('/api/reports?' + params.toString());
+            const data = await api(`${API_BASE}/reports?${params.toString()}`);
             reportTable.innerHTML = renderTable(data.data || []);
         };
 
@@ -146,27 +183,67 @@ function initHrPage() {
     const hrOutput = byId('hr-output');
     const loginForm = byId('hr-login-form');
     const logoutBtn = byId('hr-logout');
+    const hrCasesSection = byId('hr-cases-section');
+    const loginNote = byId('hr-login-note');
     const filterForm = byId('hr-filter-form');
     const casesTable = byId('hr-cases-table');
-    const updateForm = byId('hr-update-form');
 
     if (!loginForm) {
         return;
     }
 
+    const setLoggedInUi = (isLoggedIn) => {
+        const loginInputs = loginForm.querySelectorAll('input');
+        const loginSubmit = loginForm.querySelector('[type="submit"]');
+
+        loginInputs.forEach((input) => {
+            input.disabled = isLoggedIn;
+            input.closest('.col-md-4')?.classList.toggle('d-none', isLoggedIn);
+        });
+
+        if (loginSubmit) {
+            loginSubmit.disabled = isLoggedIn;
+            loginSubmit.classList.toggle('d-none', isLoggedIn);
+        }
+
+        if (logoutBtn) {
+            logoutBtn.style.display = isLoggedIn ? 'block' : 'none';
+        }
+
+        if (loginNote) {
+            loginNote.style.display = isLoggedIn ? 'none' : 'block';
+        }
+
+        if (hrCasesSection) {
+            hrCasesSection.style.display = isLoggedIn ? 'block' : 'none';
+        }
+    };
+
+    // Check if already logged in
+    if (TokenManager.hasToken()) {
+        setLoggedInUi(true);
+    }
+
     loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         try {
-            const payload = { password: loginForm.password.value };
-            const data = await api('/api/hr/login', {
+            const payload = {
+                email: loginForm.email?.value || loginForm.querySelector('[type="email"]')?.value,
+                password: loginForm.password.value
+            };
+            const data = await api(`${API_BASE}/hr/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
-            showNotification('Logged in successfully!', 'success');
-            logoutBtn.style.display = 'block';
+            
+            TokenManager.setToken(data.token);
+            showNotification(`Logged in as ${data.user.name}!`, 'success');
+            setLoggedInUi(true);
             loginForm.password.value = '';
             hrOutput.classList.add('d-none');
+
+            await loadCases();
         } catch (err) {
             showNotification('Login failed: ' + err.message, 'danger');
             hrOutput.classList.remove('d-none');
@@ -176,11 +253,11 @@ function initHrPage() {
 
     logoutBtn?.addEventListener('click', async () => {
         try {
-            const data = await api('/api/hr/logout', { method: 'POST' });
+            await api(`${API_BASE}/hr/logout`, { method: 'POST' });
+            TokenManager.clearToken();
             showNotification('Logged out successfully!', 'success');
-            logoutBtn.style.display = 'none';
+            setLoggedInUi(false);
             casesTable.innerHTML = '';
-            updateForm.reset();
             hrOutput.classList.add('d-none');
         } catch (err) {
             showNotification(err.message, 'danger');
@@ -191,8 +268,8 @@ function initHrPage() {
 
     const loadCases = async () => {
         const params = new URLSearchParams(new FormData(filterForm));
-        const data = await api('/api/hr/cases?' + params.toString());
-        casesTable.innerHTML = renderTable(data.data || []);
+        const data = await api(`${API_BASE}/hr/cases?${params.toString()}`);
+        casesTable.innerHTML = renderHrCasesTable(data.data || []);
     };
 
     filterForm?.addEventListener('submit', async (e) => {
@@ -202,6 +279,78 @@ function initHrPage() {
         } catch (err) {
             casesTable.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${err.message}</div>`;
         }
+    });
+
+    if (TokenManager.hasToken()) {
+        loadCases().catch((err) => {
+            casesTable.innerHTML = `<div class="alert alert-warning"><i class="fas fa-exclamation-circle me-2"></i>${err.message}</div>`;
+        });
+    }
+}
+
+function initHrCasePage() {
+    const casePage = byId('hr-case-page');
+    if (!casePage) {
+        return;
+    }
+
+    const hrOutput = byId('hr-output');
+    const summary = byId('hr-case-summary');
+    const updateForm = byId('hr-update-form');
+    const logoutBtn = byId('hr-case-logout');
+    const reference = (casePage.dataset.reference || '').trim();
+
+    if (!TokenManager.hasToken()) {
+        window.location.href = '/hr';
+        return;
+    }
+
+    const populateFormFromCase = (report) => {
+        if (!report || !updateForm) {
+            return;
+        }
+
+        updateForm.priority.value = report.priority || 'Normal';
+        updateForm.stage.value = report.stage || 'Logged';
+        updateForm.status.value = report.status || 'Investigation pending';
+        updateForm.anonymized_summary.value = report.anonymized_summary || '';
+        updateForm.action_taken.value = report.action_taken || '';
+        updateForm.outcome_comments.value = report.outcome_comments || '';
+        updateForm.internal_notes.value = report.internal_notes || '';
+        const checked = !!report.acknowledged_at;
+        updateForm.acknowledge.checked = checked;
+    };
+
+    const renderCaseSummary = (report) => {
+        const created = report.created_at ? new Date(report.created_at).toLocaleString() : '';
+        const acknowledged = report.acknowledged_at ? new Date(report.acknowledged_at).toLocaleString() : 'Not acknowledged';
+        summary.innerHTML = `<div class="row g-3">
+            <div class="col-md-6"><strong>Reference:</strong> ${report.reference_no || ''}</div>
+            <div class="col-md-6"><strong>Category:</strong> ${report.category || ''}</div>
+            <div class="col-md-6"><strong>Status:</strong> ${report.status || ''}</div>
+            <div class="col-md-6"><strong>Priority:</strong> ${report.priority || ''}</div>
+            <div class="col-md-6"><strong>Created:</strong> ${created}</div>
+            <div class="col-md-6"><strong>Acknowledged:</strong> ${acknowledged}</div>
+            <div class="col-12"><strong>Description:</strong><div class="mt-1">${report.description || ''}</div></div>
+        </div>`;
+    };
+
+    const loadCase = async () => {
+        const data = await api(`${API_BASE}/hr/cases/${encodeURIComponent(reference)}`);
+        const detail = data.data?.report || {};
+        renderCaseSummary(detail);
+        populateFormFromCase(detail);
+    };
+
+    logoutBtn?.addEventListener('click', async () => {
+        try {
+            await api(`${API_BASE}/hr/logout`, { method: 'POST' });
+        } catch (_err) {
+            // Ignore API logout failure and clear local token anyway.
+        }
+
+        TokenManager.clearToken();
+        window.location.href = '/hr';
     });
 
     updateForm?.addEventListener('submit', async (e) => {
@@ -225,23 +374,29 @@ function initHrPage() {
         };
 
         try {
-            const data = await api('/api/hr/cases/' + encodeURIComponent(ref), {
+            const data = await api(`${API_BASE}/hr/cases/${encodeURIComponent(ref)}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
             showNotification('Case updated successfully!', 'success');
             hrOutput.classList.add('d-none');
-            await loadCases();
+            await loadCase();
         } catch (err) {
             showNotification(err.message, 'danger');
             hrOutput.classList.remove('d-none');
             hrOutput.textContent = err.message;
         }
     });
+
+    loadCase().catch((err) => {
+        summary.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${err.message}</div>`;
+    });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     initPublicForms();
     initHrPage();
+    initHrCasePage();
 });
+

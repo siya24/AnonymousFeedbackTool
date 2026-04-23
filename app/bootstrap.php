@@ -26,3 +26,15 @@ $config = [
 App\Core\Container::set('config', $config);
 App\Core\Container::set('db', App\Core\Database::connect($config['database']));
 App\Core\Migration::run(App\Core\Container::get('db'));
+
+// Initialize JWT and Authorization services
+$jwtSecret = $_ENV['JWT_SECRET'] ?? 'your-super-secret-jwt-key-change-in-production';
+App\Core\Container::set('jwt', new App\Core\JwtService($jwtSecret));
+App\Core\Container::set('auth', new App\Core\Authorization(App\Core\Container::get('jwt')));
+
+// Initialize Repository and Service layers
+$db = App\Core\Container::get('db');
+App\Core\Container::set('feedbackRepository', new App\Repositories\FeedbackRepository($db));
+App\Core\Container::set('feedbackService', new App\Services\FeedbackService(
+    App\Core\Container::get('feedbackRepository')
+));

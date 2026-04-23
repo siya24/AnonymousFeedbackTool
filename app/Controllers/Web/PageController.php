@@ -16,4 +16,13 @@ final class PageController
     {
         Response::view('pages/hr', ['title' => 'HR Console']);
     }
+
+    public function hrCase(array $params = []): void
+    {
+        $reference = strtoupper(trim((string) ($params['reference'] ?? '')));
+        Response::view('pages/hr_case', [
+            'title' => 'Update Feedback Case',
+            'reference' => $reference,
+        ]);
+    }
 }

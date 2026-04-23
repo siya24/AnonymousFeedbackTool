@@ -18,7 +18,7 @@ final class Request
     {
         $uri = (string) ($_SERVER['REQUEST_URI'] ?? '/');
         $path = parse_url($uri, PHP_URL_PATH);
-        return $path === false ? '/' : rtrim($path, '/') ?: '/';
+        return $path === false ? '/' : (rtrim($path, '/') ?: '/');
     }
 
     public static function input(): array
