@@ -43,5 +43,14 @@
         </div>
     </div>
 
+    <div class="card mt-4">
+        <div class="card-header" style="background-color: #9d2722; color: white;">
+            <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Category Frequency &amp; Priority Guidance</h5>
+        </div>
+        <div class="card-body" id="hr-dashboard-category-frequency">
+            <div class="text-muted">Loading...</div>
+        </div>
+    </div>
+
     <pre id="hr-dashboard-output" class="output mt-3 d-none"></pre>
 </section>

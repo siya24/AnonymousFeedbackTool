@@ -117,15 +117,22 @@ class FeedbackService {
     public function getDashboardTrends(): array {
         return [
             'quarterly_by_category' => $this->repository->getQuarterlyCategoryTrends(),
-            'status_totals' => $this->repository->getStatusTotals(),
+            'status_totals'         => $this->repository->getStatusTotals(),
+            'category_frequency'    => $this->repository->getCategoryFrequencySummary(),
         ];
     }
 
     /**
      * Process scheduled notification reminders/escalations.
+     * Also enforces the 5-year audit log retention policy on each run.
      */
     public function processScheduledNotifications(): array {
-        return $this->notificationService->processScheduledNotifications();
+        // Enforce 5-year (1825-day) audit log retention as required by Technical Requirements §6.
+        $pruned = $this->repository->pruneOldAuditLogs(1825);
+
+        $result = $this->notificationService->processScheduledNotifications();
+        $result['audit_logs_pruned'] = $pruned;
+        return $result;
     }
 
     /**
@@ -191,6 +198,34 @@ class FeedbackService {
                 throw new \RuntimeException("File type {$ext} not allowed", 400);
             }
 
+            // Map each extension to all MIME types that are valid for it (magic-bytes check).
+            $mimeMap = [
+                'pdf'  => ['application/pdf'],
+                'doc'  => ['application/msword'],
+                'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                           'application/zip'], // OOXML files are ZIP containers
+                'jpg'  => ['image/jpeg'],
+                'jpeg' => ['image/jpeg'],
+                'png'  => ['image/png'],
+                'gif'  => ['image/gif'],
+                'mp3'  => ['audio/mpeg', 'audio/mp3'],
+                'wav'  => ['audio/wav', 'audio/x-wav'],
+            ];
+
+            // Validate actual file content against expected MIME types (prevents extension spoofing).
+            if (function_exists('finfo_open')) {
+                $finfo        = finfo_open(FILEINFO_MIME_TYPE);
+                $detectedMime = finfo_file($finfo, $tmpName);
+                finfo_close($finfo);
+                $allowedMimes = $mimeMap[$ext] ?? [];
+                if (!empty($allowedMimes) && !in_array($detectedMime, $allowedMimes, true)) {
+                    throw new \RuntimeException(
+                        "File {$name} content type ({$detectedMime}) does not match its declared extension",
+                        400
+                    );
+                }
+            }
+
             $storedName = bin2hex(random_bytes(16)) . '.' . $ext;
             $uploadPath = __DIR__ . '/../../uploads/' . $storedName;
 
@@ -198,18 +233,7 @@ class FeedbackService {
                 throw new \RuntimeException("Failed to store file {$name}", 500);
             }
 
-            $mimeMap = [
-                'pdf'  => 'application/pdf',
-                'doc'  => 'application/msword',
-                'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'jpg'  => 'image/jpeg',
-                'jpeg' => 'image/jpeg',
-                'png'  => 'image/png',
-                'gif'  => 'image/gif',
-                'mp3'  => 'audio/mpeg',
-                'wav'  => 'audio/wav',
-            ];
-            $mimeType = $mimeMap[$ext] ?? 'application/octet-stream';
+            $mimeType = $mimeMap[$ext][0] ?? 'application/octet-stream';
             
             $attachmentId = $this->repository->saveAttachment(
                 $reportId,

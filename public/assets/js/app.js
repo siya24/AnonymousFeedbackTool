@@ -120,6 +120,45 @@ function renderDashboardQuarterlyTrends(rows) {
     return `<div class="table-responsive"><table class="table table-striped table-hover"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
 }
 
+function renderDashboardCategoryFrequency(rows) {
+    if (!rows || !rows.length) {
+        return '<div class="alert alert-info mb-0">No category data available.</div>';
+    }
+
+    const maxOpen = Math.max(...rows.map(r => Number(r.open_cases || 0)), 1);
+
+    const head = '<tr><th>Category</th><th>Open Cases</th><th>Total Cases</th><th>Frequency</th><th>Suggested Priority</th></tr>';
+    const body = rows.map((row) => {
+        const open = Number(row.open_cases || 0);
+        const total = Number(row.total_cases || 0);
+        const pct = Math.round((open / maxOpen) * 100);
+        let badge = '';
+        if (open === 0) {
+            badge = '<span class="badge bg-success">Low</span>';
+        } else if (pct >= 75) {
+            badge = '<span class="badge bg-danger">High</span>';
+        } else if (pct >= 40) {
+            badge = '<span class="badge bg-warning text-dark">Medium</span>';
+        } else {
+            badge = '<span class="badge bg-secondary">Low</span>';
+        }
+        return `<tr>
+            <td>${escHtml(row.category || '')}</td>
+            <td>${open}</td>
+            <td>${total}</td>
+            <td>
+                <div class="progress" style="height:16px;min-width:80px">
+                    <div class="progress-bar bg-danger" style="width:${pct}%" title="${pct}%">${pct}%</div>
+                </div>
+            </td>
+            <td>${badge}</td>
+        </tr>`;
+    }).join('');
+
+    return `<p class="text-muted small mb-2">Suggested priority is derived from the proportion of still-open cases per category relative to the highest-volume category.</p>
+        <div class="table-responsive"><table class="table table-striped table-hover"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
+
 function initPublicForms() {
     const out = byId('global-output');
     const newFeedbackConfirmation = byId('new-feedback-confirmation');
@@ -551,6 +590,7 @@ function initHrDashboardPage() {
     const output = byId('hr-dashboard-output');
     const statusTotals = byId('hr-dashboard-status-totals');
     const quarterlyTrends = byId('hr-dashboard-quarterly-trends');
+    const categoryFrequency = byId('hr-dashboard-category-frequency');
     const refreshBtn = byId('hr-dashboard-refresh');
 
     if (!TokenManager.hasToken()) {
@@ -563,6 +603,9 @@ function initHrDashboardPage() {
         const data = result.data || {};
         statusTotals.innerHTML = renderDashboardStatusTotals(data.status_totals || []);
         quarterlyTrends.innerHTML = renderDashboardQuarterlyTrends(data.quarterly_by_category || []);
+        if (categoryFrequency) {
+            categoryFrequency.innerHTML = renderDashboardCategoryFrequency(data.category_frequency || []);
+        }
         output.classList.add('d-none');
     };
 

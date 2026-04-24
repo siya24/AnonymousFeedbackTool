@@ -324,6 +324,18 @@ class FeedbackRepository {
     }
 
     /**
+     * Delete audit log entries older than $retentionDays (default 1825 = 5 years).
+     * Returns the number of rows deleted.
+     */
+    public function pruneOldAuditLogs(int $retentionDays = 1825): int {
+        $stmt = $this->pdo->prepare(
+            'DELETE FROM audit_logs WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)'
+        );
+        $stmt->execute([$retentionDays]);
+        return (int) $stmt->rowCount();
+    }
+
+    /**
      * Get audit trail for reference
      */
     public function getReportAudit(string $reference): array {
@@ -404,6 +416,24 @@ class FeedbackRepository {
              LEFT JOIN statuses s ON s.id = r.status_id
              GROUP BY s.name
              ORDER BY total DESC'
+        );
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Category frequency summary: total cases and still-open cases per category.
+     * Used to support prioritisation by frequency and potential impact (FRD §4.2).
+     */
+    public function getCategoryFrequencySummary(): array {
+        $stmt = $this->pdo->query(
+            'SELECT r.category,
+                    COUNT(*) AS total_cases,
+                    SUM(CASE WHEN s.name NOT LIKE \'%completed%\' THEN 1 ELSE 0 END) AS open_cases
+             FROM reports r
+             LEFT JOIN statuses s ON s.id = r.status_id
+             GROUP BY r.category
+             ORDER BY open_cases DESC, total_cases DESC'
         );
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
