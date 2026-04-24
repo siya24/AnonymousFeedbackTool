@@ -25,4 +25,19 @@ final class PageController
             'reference' => $reference,
         ]);
     }
+
+    public function hrDashboard(array $params = []): void
+    {
+        Response::view('pages/hr_dashboard', ['title' => 'HR Dashboard']);
+    }
+
+    public function hrCategories(array $params = []): void
+    {
+        Response::view('pages/hr_categories', ['title' => 'Manage Categories']);
+    }
+
+    public function hrStatuses(array $params = []): void
+    {
+        Response::view('pages/hr_statuses', ['title' => 'Manage Statuses']);
+    }
 }

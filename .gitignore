@@ -44,3 +44,4 @@ uploads/*
 
 # Temporary extraction folder
 .tmp_req/
+login_test.ps1

@@ -28,13 +28,7 @@
                 <div class="mb-3">
                     <label for="category-new" class="form-label"><i class="fas fa-list me-1"></i>Category</label>
                     <select id="category-new" name="category" class="form-select" required>
-                        <option value="">-- Select category --</option>
-                        <option>Discrimination</option>
-                        <option>Harassment or Bullying</option>
-                        <option>Unfair Workload Distribution</option>
-                        <option>Managerial Misconduct</option>
-                        <option>Psychological Safety Concerns</option>
-                        <option>Other</option>
+                        <option value="">Loading categories...</option>
                     </select>
                 </div>
                 <div class="mb-3">
@@ -51,6 +45,11 @@
                     <i class="fas fa-check me-2"></i>Submit Anonymously
                 </button>
             </form>
+
+            <div id="new-feedback-confirmation" class="alert alert-success mt-3 d-none" role="alert">
+                <i class="fas fa-circle-check me-2"></i>Feedback submitted. Your reference number is:
+                <strong id="new-feedback-reference" class="ms-1"></strong>
+            </div>
         </div>
 
         <div id="tab-followup" class="tab-pane fade" role="tabpanel">
@@ -66,7 +65,7 @@
                             <i class="fas fa-search me-1"></i>Retrieve
                         </button>
                     </form>
-                    <pre id="lookup-output" class="output d-none"></pre>
+                    <div id="lookup-output" class="d-none"></div>
                 </div>
                 <div class="col-lg-6">
                     <h5><i class="fas fa-reply-all me-2"></i>Submit Follow-up</h5>
@@ -99,14 +98,13 @@
                         <input type="text" name="reference_no" class="form-control" placeholder="Reference number">
                     </div>
                     <div class="col-md-6">
-                        <input type="text" name="category" class="form-control" placeholder="Category">
+                        <select id="report-filter-category" name="category" class="form-select">
+                            <option value="">Any category</option>
+                        </select>
                     </div>
                     <div class="col-md-6">
-                        <select name="status" class="form-select">
+                        <select id="report-filter-status" name="status" class="form-select">
                             <option value="">Any status</option>
-                            <option>Investigation pending</option>
-                            <option>Investigation in progress</option>
-                            <option>Investigation completed</option>
                         </select>
                     </div>
                     <div class="col-md-6">

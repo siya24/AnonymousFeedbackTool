@@ -8,15 +8,8 @@
 
     <div class="card mb-4" style="border-left: 4px solid #9d2722;">
         <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div>
-                    <strong>Reference:</strong>
-                    <span id="hr-case-reference" class="ms-1"><?= htmlspecialchars($reference ?? '', ENT_QUOTES, 'UTF-8') ?></span>
-                </div>
-                <button id="hr-case-logout" type="button" class="btn btn-secondary">
-                    <i class="fas fa-sign-out-alt me-1"></i>Logout
-                </button>
-            </div>
+            <strong>Reference:</strong>
+            <span id="hr-case-reference" class="ms-1"><?= htmlspecialchars($reference ?? '', ENT_QUOTES, 'UTF-8') ?></span>
         </div>
     </div>
 
@@ -55,9 +48,7 @@
                 <div class="mb-3">
                     <label for="status" class="form-label"><i class="fas fa-sync-alt me-1"></i>Status</label>
                     <select id="status" name="status" class="form-select">
-                        <option>Investigation pending</option>
-                        <option>Investigation in progress</option>
-                        <option>Investigation completed</option>
+                        <option value="">Loading statuses...</option>
                     </select>
                 </div>
 

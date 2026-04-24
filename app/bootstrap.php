@@ -35,6 +35,23 @@ App\Core\Container::set('auth', new App\Core\Authorization(App\Core\Container::g
 // Initialize Repository and Service layers
 $db = App\Core\Container::get('db');
 App\Core\Container::set('feedbackRepository', new App\Repositories\FeedbackRepository($db));
-App\Core\Container::set('feedbackService', new App\Services\FeedbackService(
-    App\Core\Container::get('feedbackRepository')
+App\Core\Container::set('categoryRepository', new App\Repositories\CategoryRepository($db));
+App\Core\Container::set('statusRepository', new App\Repositories\StatusRepository($db));
+App\Core\Container::set('ldapAuthService', new App\Services\LdapAuthService($config['app']));
+App\Core\Container::set('notificationService', new App\Services\NotificationService(
+    App\Core\Container::get('feedbackRepository'),
+    $config['app']['mailer_from'] ?? 'noreply@organization.com',
+    $config['app']['hr_notification_email'] ?? 'hr@organization.com',
+    $config['app']['ethics_notification_email'] ?? 'ethics@organization.com'
 ));
+App\Core\Container::set('feedbackService', new App\Services\FeedbackService(
+    App\Core\Container::get('feedbackRepository'),
+    App\Core\Container::get('notificationService')
+));
+
+// Process due notification reminders/escalations; duplicates are prevented in SQL.
+try {
+    App\Core\Container::get('feedbackService')->processScheduledNotifications();
+} catch (\Throwable $e) {
+    // Non-blocking by design: app functionality should continue even if mail transport fails.
+}

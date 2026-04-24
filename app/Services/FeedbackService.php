@@ -6,7 +6,10 @@ use App\Repositories\FeedbackRepository;
 use DateTime;
 
 class FeedbackService {
-    public function __construct(private FeedbackRepository $repository) {}
+    public function __construct(
+        private FeedbackRepository $repository,
+        private NotificationService $notificationService
+    ) {}
 
     /**
      * Generate a unique reference number
@@ -28,9 +31,9 @@ class FeedbackService {
         // Log audit trail
         $this->repository->logAudit('anonymous', 'feedback_submitted', $reference, 
             "New feedback submitted in category: {$category}");
-        
-        // Log notification for HR
-        $this->repository->logNotification($reportId, 'new_feedback', 'hr@organization.com');
+
+        // Send immediate HR email alert and log notification.
+        $this->notificationService->notifyNewFeedback($reportId, $reference, $category);
         
         return [
             'success' => true,
@@ -88,8 +91,34 @@ class FeedbackService {
     /**
      * Get HR case list with filters
      */
-    public function listCasesForHr(array $filters = []): array {
-        return $this->repository->listCases($filters);
+    public function listCasesForHr(array $filters = [], int $page = 1, int $perPage = 10): array {
+        $total = $this->repository->countCases($filters);
+        $items = $this->repository->listCasesPaged($filters, $page, $perPage);
+
+        return [
+            'items' => $items,
+            'total' => $total,
+            'page' => max(1, $page),
+            'per_page' => max(1, min(100, $perPage)),
+            'total_pages' => (int) max(1, ceil($total / max(1, $perPage))),
+        ];
+    }
+
+    /**
+     * Get dashboard trend and status aggregates.
+     */
+    public function getDashboardTrends(): array {
+        return [
+            'quarterly_by_category' => $this->repository->getQuarterlyCategoryTrends(),
+            'status_totals' => $this->repository->getStatusTotals(),
+        ];
+    }
+
+    /**
+     * Process scheduled notification reminders/escalations.
+     */
+    public function processScheduledNotifications(): array {
+        return $this->notificationService->processScheduledNotifications();
     }
 
     /**
@@ -162,7 +191,18 @@ class FeedbackService {
                 throw new \RuntimeException("Failed to store file {$name}", 500);
             }
 
-            $mimeType = mime_content_type($uploadPath) ?: 'application/octet-stream';
+            $mimeMap = [
+                'pdf'  => 'application/pdf',
+                'doc'  => 'application/msword',
+                'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'jpg'  => 'image/jpeg',
+                'jpeg' => 'image/jpeg',
+                'png'  => 'image/png',
+                'gif'  => 'image/gif',
+                'mp3'  => 'audio/mpeg',
+                'wav'  => 'audio/wav',
+            ];
+            $mimeType = $mimeMap[$ext] ?? 'application/octet-stream';
             
             $attachmentId = $this->repository->saveAttachment(
                 $reportId,

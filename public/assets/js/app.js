@@ -1,5 +1,6 @@
 const byId = (id) => document.getElementById(id);
 const API_BASE = '/api';
+const escHtml = (str) => String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
 // JWT Token management
 const TokenManager = {
@@ -90,8 +91,58 @@ function renderHrCasesTable(rows) {
     return `<table class="table table-striped table-hover"><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 
+function renderDashboardStatusTotals(rows) {
+    if (!rows.length) {
+        return '<div class="alert alert-info mb-0">No status data available.</div>';
+    }
+
+    const items = rows.map((row) => `<li class="list-group-item d-flex justify-content-between align-items-center">
+        <span>${row.status || ''}</span>
+        <span class="badge bg-primary rounded-pill">${row.total || 0}</span>
+    </li>`).join('');
+
+    return `<ul class="list-group">${items}</ul>`;
+}
+
+function renderDashboardQuarterlyTrends(rows) {
+    if (!rows.length) {
+        return '<div class="alert alert-info mb-0">No quarterly trend data available.</div>';
+    }
+
+    const head = '<tr><th>Year</th><th>Quarter</th><th>Category</th><th>Total Cases</th></tr>';
+    const body = rows.map((row) => `<tr>
+        <td>${row.year_no || ''}</td>
+        <td>Q${row.quarter_no || ''}</td>
+        <td>${row.category || ''}</td>
+        <td>${row.total_cases || 0}</td>
+    </tr>`).join('');
+
+    return `<div class="table-responsive"><table class="table table-striped table-hover"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
+
 function initPublicForms() {
     const out = byId('global-output');
+    const newFeedbackConfirmation = byId('new-feedback-confirmation');
+    const newFeedbackReference = byId('new-feedback-reference');
+
+    // Populate category selects from the API
+    const categoryNew = byId('category-new');
+    const categoryReportFilter = byId('report-filter-category');
+    api(`${API_BASE}/categories`).then(data => {
+        const opts = (data.data || []).map(c => `<option value="${escHtml(c.name)}">${escHtml(c.name)}</option>`).join('');
+        if (categoryNew) categoryNew.innerHTML = '<option value="">-- Select category --</option>' + opts;
+        if (categoryReportFilter) categoryReportFilter.innerHTML = '<option value="">Any category</option>' + opts;
+    }).catch(() => {
+        if (categoryNew) categoryNew.innerHTML = '<option value="">-- Select category --</option>';
+    });
+
+    const statusReportFilter = byId('report-filter-status');
+    api(`${API_BASE}/statuses`).then(data => {
+        const opts = (data.data || []).map(s => `<option value="${escHtml(s.name)}">${escHtml(s.name)}</option>`).join('');
+        if (statusReportFilter) statusReportFilter.innerHTML = '<option value="">Any status</option>' + opts;
+    }).catch(() => {
+        if (statusReportFilter) statusReportFilter.innerHTML = '<option value="">Any status</option>';
+    });
 
     const newForm = byId('new-feedback-form');
     if (newForm) {
@@ -102,7 +153,13 @@ function initPublicForms() {
                     method: 'POST',
                     body: new FormData(newForm),
                 });
-                showNotification('Feedback submitted successfully!', 'success');
+
+                const reference = (data.reference_no || '').toString().trim();
+                if (newFeedbackConfirmation && newFeedbackReference) {
+                    newFeedbackReference.textContent = reference || '';
+                    newFeedbackConfirmation.classList.remove('d-none');
+                }
+
                 out.classList.add('d-none');
                 newForm.reset();
             } catch (err) {
@@ -112,6 +169,8 @@ function initPublicForms() {
             }
         });
     }
+
+
 
     const followupForm = byId('followup-form');
     if (followupForm) {
@@ -145,11 +204,29 @@ function initPublicForms() {
             try {
                 const data = await api(`${API_BASE}/feedback/${encodeURIComponent(reference)}`);
                 lookupOut.classList.remove('d-none');
-                lookupOut.textContent = JSON.stringify(data, null, 2);
+                const statusBadgeClass = data.status === 'Resolved' ? 'bg-success' : data.status === 'Investigation pending' ? 'bg-warning text-dark' : 'bg-secondary';
+                const updates = (data.updates || []).map(u => `<li class="list-group-item"><small class="text-muted">${escHtml(u.created_at || '')}</small><br>${escHtml(u.update_text || '')}</li>`).join('');
+                const attachments = (data.attachments || []).map(a => `<li class="list-group-item"><a href="/api/attachments/${encodeURIComponent(a.id)}" download="${escHtml(a.original_name)}"><i class="fas fa-paperclip me-1"></i>${escHtml(a.original_name)}</a></li>`).join('');
+                lookupOut.innerHTML = `
+                  <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                      <div class="d-flex justify-content-between align-items-start mb-3">
+                        <h6 class="card-title mb-0"><i class="fas fa-folder-open me-2"></i>${escHtml(data.reference_no || '')}</h6>
+                        <span class="badge ${statusBadgeClass}">${escHtml(data.status || '')}</span>
+                      </div>
+                      <dl class="row mb-0">
+                        <dt class="col-sm-4">Category</dt><dd class="col-sm-8">${escHtml(data.category || '')}</dd>
+                        <dt class="col-sm-4">Submitted</dt><dd class="col-sm-8">${escHtml(data.created_at || '')}</dd>
+                        <dt class="col-sm-4">Description</dt><dd class="col-sm-8">${escHtml(data.description || '')}</dd>
+                      </dl>
+                      ${attachments ? `<hr><p class="fw-semibold mb-1">Attachments</p><ul class="list-group list-group-flush">${attachments}</ul>` : ''}
+                      ${updates ? `<hr><p class="fw-semibold mb-1">Updates</p><ul class="list-group list-group-flush">${updates}</ul>` : ''}
+                    </div>
+                  </div>`;
                 showNotification('Case retrieved successfully!', 'success');
             } catch (err) {
                 lookupOut.classList.remove('d-none');
-                lookupOut.textContent = err.message;
+                lookupOut.innerHTML = `<div class="alert alert-danger mb-0">${escHtml(err.message)}</div>`;
                 showNotification(err.message, 'danger');
             }
         });
@@ -157,6 +234,7 @@ function initPublicForms() {
 
     const reportFilter = byId('public-report-filter');
     const reportTable = byId('public-report-table');
+    const reportingTab = byId('tab-reporting');
     if (reportFilter) {
         const load = async () => {
             const params = new URLSearchParams(new FormData(reportFilter));
@@ -176,17 +254,29 @@ function initPublicForms() {
         load().catch(() => {
             reportTable.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-circle me-2"></i>Could not load reports.</div>';
         });
+
+        // Auto-refresh employee reporting so updates are visible without manual reload.
+        setInterval(() => {
+            const isVisible = reportingTab?.classList.contains('active') || reportingTab?.classList.contains('show');
+            if (!isVisible) {
+                return;
+            }
+
+            load().catch(() => {
+                reportTable.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-circle me-2"></i>Could not refresh reports.</div>';
+            });
+        }, 30000);
     }
 }
 
 function initHrPage() {
     const hrOutput = byId('hr-output');
     const loginForm = byId('hr-login-form');
-    const logoutBtn = byId('hr-logout');
     const hrCasesSection = byId('hr-cases-section');
     const loginNote = byId('hr-login-note');
     const filterForm = byId('hr-filter-form');
     const casesTable = byId('hr-cases-table');
+    const paginationEl = byId('hr-cases-pagination');
 
     if (!loginForm) {
         return;
@@ -206,9 +296,7 @@ function initHrPage() {
             loginSubmit.classList.toggle('d-none', isLoggedIn);
         }
 
-        if (logoutBtn) {
-            logoutBtn.style.display = isLoggedIn ? 'block' : 'none';
-        }
+        window._navAuthUpdate?.(isLoggedIn);
 
         if (loginNote) {
             loginNote.style.display = isLoggedIn ? 'none' : 'block';
@@ -243,6 +331,7 @@ function initHrPage() {
             loginForm.password.value = '';
             hrOutput.classList.add('d-none');
 
+            await loadFilterOptions();
             await loadCases();
         } catch (err) {
             showNotification('Login failed: ' + err.message, 'danger');
@@ -251,29 +340,79 @@ function initHrPage() {
         }
     });
 
-    logoutBtn?.addEventListener('click', async () => {
-        try {
-            await api(`${API_BASE}/hr/logout`, { method: 'POST' });
-            TokenManager.clearToken();
-            showNotification('Logged out successfully!', 'success');
-            setLoggedInUi(false);
-            casesTable.innerHTML = '';
-            hrOutput.classList.add('d-none');
-        } catch (err) {
-            showNotification(err.message, 'danger');
-            hrOutput.classList.remove('d-none');
-            hrOutput.textContent = err.message;
+
+
+    let currentPage = 1;
+    const perPage = 10;
+
+    const renderPagination = (meta) => {
+        if (!paginationEl) {
+            return;
         }
-    });
+
+        const page = Number(meta?.page || 1);
+        const totalPages = Number(meta?.total_pages || 1);
+        const total = Number(meta?.total || 0);
+
+        if (totalPages <= 1) {
+            paginationEl.innerHTML = `<small class="text-muted">Showing ${total} record(s)</small>`;
+            return;
+        }
+
+        paginationEl.innerHTML = `
+            <small class="text-muted">Page ${page} of ${totalPages} (${total} records)</small>
+            <div class="btn-group" role="group" aria-label="Pagination controls">
+                <button type="button" class="btn btn-outline-primary btn-sm" id="hr-page-prev" ${page <= 1 ? 'disabled' : ''}>Prev</button>
+                <button type="button" class="btn btn-outline-primary btn-sm" id="hr-page-next" ${page >= totalPages ? 'disabled' : ''}>Next</button>
+            </div>
+        `;
+
+        byId('hr-page-prev')?.addEventListener('click', () => {
+            if (page > 1) {
+                currentPage = page - 1;
+                loadCases().catch(() => {});
+            }
+        });
+
+        byId('hr-page-next')?.addEventListener('click', () => {
+            if (page < totalPages) {
+                currentPage = page + 1;
+                loadCases().catch(() => {});
+            }
+        });
+    };
+
+    const loadFilterOptions = async () => {
+        const [categories, statuses] = await Promise.all([
+            api(`${API_BASE}/categories`),
+            api(`${API_BASE}/statuses`),
+        ]);
+
+        const filterCategory = byId('filter-category');
+        if (filterCategory) {
+            const opts = (categories.data || []).map((c) => `<option value="${escHtml(c.name)}">${escHtml(c.name)}</option>`).join('');
+            filterCategory.innerHTML = '<option value="">Any category</option>' + opts;
+        }
+
+        const filterStatus = byId('filter-status');
+        if (filterStatus) {
+            const opts = (statuses.data || []).map((s) => `<option value="${escHtml(s.name)}">${escHtml(s.name)}</option>`).join('');
+            filterStatus.innerHTML = '<option value="">Any status</option>' + opts;
+        }
+    };
 
     const loadCases = async () => {
         const params = new URLSearchParams(new FormData(filterForm));
+        params.set('page', String(currentPage));
+        params.set('per_page', String(perPage));
         const data = await api(`${API_BASE}/hr/cases?${params.toString()}`);
         casesTable.innerHTML = renderHrCasesTable(data.data || []);
+        renderPagination(data.pagination || {});
     };
 
     filterForm?.addEventListener('submit', async (e) => {
         e.preventDefault();
+        currentPage = 1;
         try {
             await loadCases();
         } catch (err) {
@@ -282,7 +421,7 @@ function initHrPage() {
     });
 
     if (TokenManager.hasToken()) {
-        loadCases().catch((err) => {
+        Promise.all([loadFilterOptions(), loadCases()]).catch((err) => {
             casesTable.innerHTML = `<div class="alert alert-warning"><i class="fas fa-exclamation-circle me-2"></i>${err.message}</div>`;
         });
     }
@@ -297,7 +436,7 @@ function initHrCasePage() {
     const hrOutput = byId('hr-output');
     const summary = byId('hr-case-summary');
     const updateForm = byId('hr-update-form');
-    const logoutBtn = byId('hr-case-logout');
+    const statusSelect = byId('status');
     const reference = (casePage.dataset.reference || '').trim();
 
     if (!TokenManager.hasToken()) {
@@ -321,9 +460,12 @@ function initHrCasePage() {
         updateForm.acknowledge.checked = checked;
     };
 
-    const renderCaseSummary = (report) => {
+    const renderCaseSummary = (report, attachments) => {
         const created = report.created_at ? new Date(report.created_at).toLocaleString() : '';
         const acknowledged = report.acknowledged_at ? new Date(report.acknowledged_at).toLocaleString() : 'Not acknowledged';
+        const attachmentLinks = (attachments || []).map(a =>
+            `<a href="/api/attachments/${encodeURIComponent(a.id)}" download="${escHtml(a.original_name)}" class="me-2"><i class="fas fa-paperclip me-1"></i>${escHtml(a.original_name)}</a>`
+        ).join('');
         summary.innerHTML = `<div class="row g-3">
             <div class="col-md-6"><strong>Reference:</strong> ${report.reference_no || ''}</div>
             <div class="col-md-6"><strong>Category:</strong> ${report.category || ''}</div>
@@ -332,26 +474,27 @@ function initHrCasePage() {
             <div class="col-md-6"><strong>Created:</strong> ${created}</div>
             <div class="col-md-6"><strong>Acknowledged:</strong> ${acknowledged}</div>
             <div class="col-12"><strong>Description:</strong><div class="mt-1">${report.description || ''}</div></div>
+            ${attachmentLinks ? `<div class="col-12"><strong>Attachments:</strong><div class="mt-1">${attachmentLinks}</div></div>` : ''}
         </div>`;
     };
 
     const loadCase = async () => {
         const data = await api(`${API_BASE}/hr/cases/${encodeURIComponent(reference)}`);
         const detail = data.data?.report || {};
-        renderCaseSummary(detail);
+        const attachments = data.data?.attachments || [];
+        renderCaseSummary(detail, attachments);
         populateFormFromCase(detail);
     };
 
-    logoutBtn?.addEventListener('click', async () => {
-        try {
-            await api(`${API_BASE}/hr/logout`, { method: 'POST' });
-        } catch (_err) {
-            // Ignore API logout failure and clear local token anyway.
+    const loadStatuses = async () => {
+        const data = await api(`${API_BASE}/statuses`);
+        const opts = (data.data || []).map((s) => `<option value="${escHtml(s.name)}">${escHtml(s.name)}</option>`).join('');
+        if (statusSelect) {
+            statusSelect.innerHTML = opts;
         }
+    };
 
-        TokenManager.clearToken();
-        window.location.href = '/hr';
-    });
+
 
     updateForm?.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -389,14 +532,345 @@ function initHrCasePage() {
         }
     });
 
-    loadCase().catch((err) => {
-        summary.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${err.message}</div>`;
+    (async () => {
+        try {
+            await loadStatuses();
+            await loadCase();
+        } catch (err) {
+            summary.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${err.message}</div>`;
+        }
+    })();
+}
+
+function initHrDashboardPage() {
+    const dashboardPage = byId('hr-dashboard-page');
+    if (!dashboardPage) {
+        return;
+    }
+
+    const output = byId('hr-dashboard-output');
+    const statusTotals = byId('hr-dashboard-status-totals');
+    const quarterlyTrends = byId('hr-dashboard-quarterly-trends');
+    const refreshBtn = byId('hr-dashboard-refresh');
+
+    if (!TokenManager.hasToken()) {
+        window.location.href = '/hr';
+        return;
+    }
+
+    const loadDashboard = async () => {
+        const result = await api(`${API_BASE}/hr/dashboard/trends`);
+        const data = result.data || {};
+        statusTotals.innerHTML = renderDashboardStatusTotals(data.status_totals || []);
+        quarterlyTrends.innerHTML = renderDashboardQuarterlyTrends(data.quarterly_by_category || []);
+        output.classList.add('d-none');
+    };
+
+    refreshBtn?.addEventListener('click', async () => {
+        try {
+            await loadDashboard();
+            showNotification('Dashboard refreshed.', 'success');
+        } catch (err) {
+            output.classList.remove('d-none');
+            output.textContent = err.message;
+        }
+    });
+
+    loadDashboard().catch((err) => {
+        output.classList.remove('d-none');
+        output.textContent = err.message;
     });
 }
 
+function initHrCategories() {
+    const section = byId('hr-categories-section');
+    const catTable = byId('cat-table');
+    const addBtn = byId('cat-add-btn');
+    const addForm = byId('cat-add-form');
+    const saveBtn = byId('cat-save-btn');
+    const cancelBtn = byId('cat-cancel-btn');
+    const newName = byId('cat-new-name');
+    const newOrder = byId('cat-new-order');
+
+    if (!section) return;
+    if (!TokenManager.hasToken()) {
+        window.location.href = '/hr';
+        return;
+    }
+
+    let editingId = null;
+
+    const renderCategoryTable = (categories) => {
+        if (!categories.length) {
+            catTable.innerHTML = '<p class="text-muted">No categories yet.</p>';
+            return;
+        }
+        const rows = categories.map(c => `
+          <tr>
+            <td>${escHtml(c.name)}</td>
+            <td>${c.sort_order}</td>
+            <td><span class="badge ${c.is_active ? 'bg-success' : 'bg-secondary'}">${c.is_active ? 'Active' : 'Inactive'}</span></td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary me-1 cat-edit-btn" data-id="${c.id}" data-name="${escHtml(c.name)}" data-order="${c.sort_order}" data-active="${c.is_active}">
+                <i class="fas fa-edit"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-danger cat-delete-btn" data-id="${c.id}" data-name="${escHtml(c.name)}">
+                <i class="fas fa-trash"></i>
+              </button>
+            </td>
+          </tr>`).join('');
+        catTable.innerHTML = `<table class="table table-sm table-hover">
+          <thead><tr><th>Name</th><th>Sort Order</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${rows}</tbody></table>`;
+
+        catTable.querySelectorAll('.cat-edit-btn').forEach(btn => btn.addEventListener('click', () => {
+            editingId = parseInt(btn.dataset.id);
+            newName.value = btn.dataset.name;
+            newOrder.value = btn.dataset.order;
+            addForm.dataset.active = btn.dataset.active;
+            addForm.classList.remove('d-none');
+            saveBtn.textContent = 'Update';
+            newName.focus();
+        }));
+
+        catTable.querySelectorAll('.cat-delete-btn').forEach(btn => btn.addEventListener('click', async () => {
+            if (!confirm(`Delete category "${btn.dataset.name}"? This cannot be undone.`)) return;
+            try {
+                await api(`${API_BASE}/hr/categories/${encodeURIComponent(btn.dataset.id)}`, { method: 'DELETE' });
+                showNotification('Category deleted.', 'success');
+                await loadCategories();
+            } catch (err) {
+                showNotification(err.message, 'danger');
+            }
+        }));
+    };
+
+    const loadCategories = async () => {
+        const data = await api(`${API_BASE}/hr/categories`);
+        renderCategoryTable(data.data || []);
+
+        // Also refresh the filter select in the HR cases section
+        const filterSelect = byId('filter-category');
+        if (filterSelect) {
+            const opts = (data.data || []).map(c => `<option value="${escHtml(c.name)}">${escHtml(c.name)}</option>`).join('');
+            filterSelect.innerHTML = '<option value="">Any category</option>' + opts;
+        }
+    };
+
+    window._reloadHrCategories = loadCategories;
+
+    addBtn?.addEventListener('click', () => {
+        editingId = null;
+        newName.value = '';
+        newOrder.value = '0';
+        delete addForm.dataset.active;
+        addForm.classList.remove('d-none');
+        saveBtn.textContent = 'Save';
+        newName.focus();
+    });
+
+    cancelBtn?.addEventListener('click', () => {
+        addForm.classList.add('d-none');
+        editingId = null;
+    });
+
+    saveBtn?.addEventListener('click', async () => {
+        const name = newName.value.trim();
+        const order = parseInt(newOrder.value) || 0;
+        if (!name) { showNotification('Category name is required.', 'warning'); return; }
+
+        try {
+            if (editingId) {
+                const isActive = addForm.dataset.active !== '0';
+                await api(`${API_BASE}/hr/categories/${encodeURIComponent(editingId)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, is_active: isActive, sort_order: order }),
+                });
+                showNotification('Category updated.', 'success');
+            } else {
+                await api(`${API_BASE}/hr/categories`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, sort_order: order }),
+                });
+                showNotification('Category created.', 'success');
+            }
+            addForm.classList.add('d-none');
+            editingId = null;
+            await loadCategories();
+        } catch (err) {
+            showNotification(err.message, 'danger');
+        }
+    });
+
+    loadCategories().catch(() => {});
+}
+
+function initHrStatuses() {
+    const section = byId('hr-statuses-section');
+    const statusTable = byId('status-table');
+    const addBtn = byId('status-add-btn');
+    const addForm = byId('status-add-form');
+    const saveBtn = byId('status-save-btn');
+    const cancelBtn = byId('status-cancel-btn');
+    const newName = byId('status-new-name');
+    const newOrder = byId('status-new-order');
+
+    if (!section) return;
+    if (!TokenManager.hasToken()) {
+        window.location.href = '/hr';
+        return;
+    }
+
+    let editingId = null;
+
+    const renderStatusTable = (statuses) => {
+        if (!statuses.length) {
+            statusTable.innerHTML = '<p class="text-muted">No statuses yet.</p>';
+            return;
+        }
+
+        const rows = statuses.map((s) => `
+          <tr>
+            <td>${escHtml(s.name)}</td>
+            <td>${s.sort_order}</td>
+            <td><span class="badge ${s.is_active ? 'bg-success' : 'bg-secondary'}">${s.is_active ? 'Active' : 'Inactive'}</span></td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary me-1 status-edit-btn" data-id="${s.id}" data-name="${escHtml(s.name)}" data-order="${s.sort_order}" data-active="${s.is_active}">
+                <i class="fas fa-edit"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-danger status-delete-btn" data-id="${s.id}" data-name="${escHtml(s.name)}">
+                <i class="fas fa-trash"></i>
+              </button>
+            </td>
+          </tr>`).join('');
+
+        statusTable.innerHTML = `<table class="table table-sm table-hover">
+          <thead><tr><th>Name</th><th>Sort Order</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${rows}</tbody></table>`;
+
+        statusTable.querySelectorAll('.status-edit-btn').forEach((btn) => btn.addEventListener('click', () => {
+            editingId = parseInt(btn.dataset.id, 10);
+            newName.value = btn.dataset.name;
+            newOrder.value = btn.dataset.order;
+            addForm.dataset.active = btn.dataset.active;
+            addForm.classList.remove('d-none');
+            saveBtn.textContent = 'Update';
+            newName.focus();
+        }));
+
+        statusTable.querySelectorAll('.status-delete-btn').forEach((btn) => btn.addEventListener('click', async () => {
+            if (!confirm(`Delete status "${btn.dataset.name}"? This cannot be undone.`)) return;
+            try {
+                await api(`${API_BASE}/hr/statuses/${encodeURIComponent(btn.dataset.id)}`, { method: 'DELETE' });
+                showNotification('Status deleted.', 'success');
+                await loadStatuses();
+            } catch (err) {
+                showNotification(err.message, 'danger');
+            }
+        }));
+    };
+
+    const loadStatuses = async () => {
+        const data = await api(`${API_BASE}/hr/statuses`);
+        renderStatusTable(data.data || []);
+
+        const filterSelect = byId('filter-status');
+        if (filterSelect) {
+            const opts = (data.data || []).map((s) => `<option value="${escHtml(s.name)}">${escHtml(s.name)}</option>`).join('');
+            filterSelect.innerHTML = '<option value="">Any status</option>' + opts;
+        }
+    };
+
+    window._reloadHrStatuses = loadStatuses;
+
+    addBtn?.addEventListener('click', () => {
+        editingId = null;
+        newName.value = '';
+        newOrder.value = '0';
+        delete addForm.dataset.active;
+        addForm.classList.remove('d-none');
+        saveBtn.textContent = 'Save';
+        newName.focus();
+    });
+
+    cancelBtn?.addEventListener('click', () => {
+        addForm.classList.add('d-none');
+        editingId = null;
+    });
+
+    saveBtn?.addEventListener('click', async () => {
+        const name = newName.value.trim();
+        const order = parseInt(newOrder.value, 10) || 0;
+        if (!name) {
+            showNotification('Status name is required.', 'warning');
+            return;
+        }
+
+        try {
+            if (editingId) {
+                const isActive = addForm.dataset.active !== '0';
+                await api(`${API_BASE}/hr/statuses/${encodeURIComponent(editingId)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, is_active: isActive, sort_order: order }),
+                });
+                showNotification('Status updated.', 'success');
+            } else {
+                await api(`${API_BASE}/hr/statuses`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, sort_order: order }),
+                });
+                showNotification('Status created.', 'success');
+            }
+
+            addForm.classList.add('d-none');
+            editingId = null;
+            await loadStatuses();
+        } catch (err) {
+            showNotification(err.message, 'danger');
+        }
+    });
+
+    loadStatuses().catch(() => {});
+}
+
+function initNavAuth() {
+    const loginItem = byId('nav-hr-login-item');
+    const logoutItem = byId('nav-hr-logout-item');
+    const logoutBtn = byId('nav-hr-logout');
+
+    const update = (isLoggedIn) => {
+        if (loginItem) loginItem.style.display = isLoggedIn ? 'none' : '';
+        if (logoutItem) logoutItem.style.display = isLoggedIn ? '' : 'none';
+    };
+
+    update(TokenManager.hasToken());
+
+    logoutBtn?.addEventListener('click', async () => {
+        try {
+            await api(`${API_BASE}/hr/logout`, { method: 'POST' });
+        } catch (_err) {}
+        TokenManager.clearToken();
+        update(false);
+        showNotification('Logged out successfully!', 'success');
+        if (window.location.pathname !== '/') {
+            window.location.href = '/hr';
+        }
+    });
+
+    window._navAuthUpdate = update;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    initNavAuth();
     initPublicForms();
     initHrPage();
     initHrCasePage();
+    initHrDashboardPage();
+    initHrCategories();
+    initHrStatuses();
 });
 

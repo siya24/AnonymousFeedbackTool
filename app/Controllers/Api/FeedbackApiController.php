@@ -48,7 +48,7 @@ final class FeedbackApiController
                 'reference_no' => $result['reference'],
                 'warning' => 'Keep this reference number safe for follow-up and tracking.',
             ], 201);
-        } catch (\RuntimeException $e) {
+        } catch (\Throwable $e) {
             Response::json(['error' => $e->getMessage()], 422);
         }
     }
@@ -72,8 +72,10 @@ final class FeedbackApiController
             
             // Handle attachments
             if (isset($_FILES['attachments'])) {
+                $reportDetail = $this->feedbackService->getCaseDetails($referenceNo);
+                $reportId = (int) ($reportDetail['report']['id'] ?? 0);
                 $this->feedbackService->storeAttachments(
-                    $this->feedbackService->getPublicReports(['reference_no' => $referenceNo])[0]['id'] ?? 0,
+                    $reportId,
                     $result['update_id'],
                     $_FILES['attachments']
                 );
@@ -84,8 +86,11 @@ final class FeedbackApiController
                 'update_reference_no' => $result['update_reference'],
                 'reference_no' => $referenceNo,
             ]);
-        } catch (\RuntimeException $e) {
+        } catch (\Throwable $e) {
             $code = (int) ($e->getCode() ?: 400);
+            if ($code < 400 || $code > 599) {
+                $code = 400;
+            }
             Response::json(['error' => $e->getMessage()], $code);
         }
     }
@@ -121,6 +126,40 @@ final class FeedbackApiController
     }
 
     /**
+     * Download attachment file
+     * GET /api/attachments/{id}
+     */
+    public function downloadAttachment(array $params): void
+    {
+        $id = (int) ($params['id'] ?? 0);
+        if ($id <= 0) {
+            Response::json(['error' => 'Invalid attachment ID'], 400);
+        }
+
+        $repository = \App\Core\Container::get('feedbackRepository');
+        $attachment = $repository->getAttachmentById($id);
+
+        if (!$attachment) {
+            Response::json(['error' => 'Attachment not found'], 404);
+        }
+
+        $uploadPath = __DIR__ . '/../../../uploads/' . basename($attachment['stored_name']);
+        if (!file_exists($uploadPath)) {
+            Response::json(['error' => 'File not found on server'], 404);
+        }
+
+        // Sanitize filename for Content-Disposition header
+        $safeName = preg_replace('/[^\w.\- ]/', '_', $attachment['original_name']);
+
+        header('Content-Type: ' . ($attachment['mime_type'] ?: 'application/octet-stream'));
+        header('Content-Disposition: attachment; filename="' . $safeName . '"');
+        header('Content-Length: ' . filesize($uploadPath));
+        header('Cache-Control: no-store');
+        readfile($uploadPath);
+        exit;
+    }
+
+    /**
      * Get public anonymized reports
      * GET /api/reports
      */
@@ -131,6 +170,7 @@ final class FeedbackApiController
                 'reference_no' => Request::query('reference_no'),
                 'category' => Request::query('category'),
                 'status' => Request::query('status'),
+                'date' => Request::query('date'),
             ];
 
             $reports = $this->feedbackService->getPublicReports($filters);

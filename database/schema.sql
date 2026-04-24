@@ -1,10 +1,23 @@
+-- Statuses table: Configurable workflow statuses managed by HR
+CREATE TABLE IF NOT EXISTS statuses (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(120) NOT NULL UNIQUE,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    sort_order INT UNSIGNED NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+
+    INDEX idx_is_active (is_active),
+    INDEX idx_sort_order (sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Reports table: Main feedback submission storage
 CREATE TABLE IF NOT EXISTS reports (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     reference_no VARCHAR(40) NOT NULL UNIQUE,
     category VARCHAR(120) NOT NULL,
     description TEXT NOT NULL,
-    status ENUM('Investigation pending', 'Investigation in progress', 'Investigation completed') NOT NULL DEFAULT 'Investigation pending',
+    status_id INT UNSIGNED NOT NULL,
     priority ENUM('Low', 'Normal', 'High', 'Critical') NOT NULL DEFAULT 'Normal',
     stage VARCHAR(120) NOT NULL DEFAULT 'Logged',
     anonymized_summary TEXT NULL,
@@ -14,15 +27,17 @@ CREATE TABLE IF NOT EXISTS reports (
     acknowledged_at DATETIME NULL,
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
+
+    CONSTRAINT fk_reports_status FOREIGN KEY (status_id) REFERENCES statuses(id),
     
     INDEX idx_reference_no (reference_no),
-    INDEX idx_status (status),
+    INDEX idx_status_id (status_id),
     INDEX idx_category (category),
     INDEX idx_priority (priority),
     INDEX idx_created_at (created_at),
     INDEX idx_updated_at (updated_at),
-    INDEX idx_status_created (status, created_at),
-    INDEX idx_category_status (category, status)
+    INDEX idx_status_created (status_id, created_at),
+    INDEX idx_category_status (category, status_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Report updates table: Follow-up messages and additional information
@@ -86,3 +101,17 @@ CREATE TABLE IF NOT EXISTS notifications (
     INDEX idx_kind (kind),
     INDEX idx_recipient (recipient)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Categories table: Configurable feedback categories managed by HR
+CREATE TABLE IF NOT EXISTS categories (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(120) NOT NULL UNIQUE,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    sort_order INT UNSIGNED NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+
+    INDEX idx_is_active (is_active),
+    INDEX idx_sort_order (sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
