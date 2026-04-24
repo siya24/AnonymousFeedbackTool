@@ -40,4 +40,24 @@ final class PageController
     {
         Response::view('pages/hr_statuses', ['title' => 'Manage Statuses']);
     }
+
+    public function apiDocs(array $params = []): void
+    {
+        $viewPath = __DIR__ . '/../../Views/pages/api_docs.php';
+        http_response_code(200);
+        header('Content-Type: text/html; charset=utf-8');
+        readfile($viewPath);
+        exit;
+    }
+
+    public function openApiSpec(array $params = []): void
+    {
+        $specPath = __DIR__ . '/../../../public/api-docs/openapi.json';
+        http_response_code(200);
+        header('Content-Type: application/json; charset=utf-8');
+        $origin = rtrim((string) (getenv('APP_BASE_URL') ?: 'http://localhost:8000'), '/');
+        header('Access-Control-Allow-Origin: ' . $origin);
+        readfile($specPath);
+        exit;
+    }
 }

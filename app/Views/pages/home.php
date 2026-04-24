@@ -15,11 +15,11 @@
                 <i class="fas fa-reply me-1"></i>Follow-up
             </button>
         </li>
-        <li class="nav-item" role="presentation">
+        <!-- <li class="nav-item" role="presentation">
             <button class="nav-link" id="tab-reporting-btn" data-bs-toggle="tab" data-bs-target="#tab-reporting" type="button" role="tab">
                 <i class="fas fa-chart-bar me-1"></i>Employee Reporting
             </button>
-        </li>
+        </li> -->
     </ul>
 
     <div class="tab-content">

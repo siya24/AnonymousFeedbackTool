@@ -43,6 +43,9 @@ final class HrApiController
             Response::json(['error' => 'Email and password required'], 400);
         }
 
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+        $this->checkLoginRateLimit($ip);
+
         $mode = strtolower((string) ($this->appConfig['hr_auth_mode'] ?? 'local'));
         if (!in_array($mode, ['local', 'ldap', 'hybrid'], true)) {
             $mode = 'local';
@@ -60,12 +63,16 @@ final class HrApiController
             }
         } catch (\RuntimeException $e) {
             $code = (int) ($e->getCode() ?: 400);
+            $this->recordLoginAttempt($ip, false);
             Response::json(['error' => $e->getMessage()], $code);
         }
 
         if ($user === null) {
+            $this->recordLoginAttempt($ip, false);
             Response::json(['error' => 'Invalid credentials'], 401);
         }
+
+        $this->recordLoginAttempt($ip, true);
 
         // Generate JWT token
         $jwt = Container::get('jwt');
@@ -103,6 +110,30 @@ final class HrApiController
         return $user;
     }
 
+    private function checkLoginRateLimit(string $ip): void
+    {
+        $stmt = $this->db->prepare(
+            'SELECT COUNT(*) FROM login_attempts
+             WHERE ip = ? AND success = 0 AND attempted_at >= DATE_SUB(NOW(), INTERVAL 15 MINUTE)'
+        );
+        $stmt->execute([$ip]);
+        if ((int) $stmt->fetchColumn() >= 5) {
+            Response::json(['error' => 'Too many failed login attempts. Please try again in 15 minutes.'], 429);
+        }
+    }
+
+    private function recordLoginAttempt(string $ip, bool $success): void
+    {
+        try {
+            $stmt = $this->db->prepare(
+                'INSERT INTO login_attempts (ip, success) VALUES (?, ?)'
+            );
+            $stmt->execute([$ip, $success ? 1 : 0]);
+        } catch (\Throwable $e) {
+            // Non-blocking: do not fail login if logging fails.
+        }
+    }
+
     private function authenticateLdap(string $identifier, string $password): ?array
     {
         $profile = $this->ldapAuthService->authenticate($identifier, $password);
@@ -110,6 +141,31 @@ final class HrApiController
             return null;
         }
 
+        // ── Group-based access control ────────────────────────────────────────
+        // When LDAP groups are configured, ONLY members of those groups may access
+        // the HR Console. The role is derived from which group they belong to.
+        $hrGroupsRaw = trim((string) ($this->appConfig['ldap_hr_groups'] ?? ''));
+        $isGroupsRaw = trim((string) ($this->appConfig['ldap_is_groups'] ?? ''));
+        $hrOusRaw    = trim((string) ($this->appConfig['ldap_hr_ous'] ?? ''));
+        $isOusRaw    = trim((string) ($this->appConfig['ldap_is_ous'] ?? ''));
+        $hrDeptsRaw  = trim((string) ($this->appConfig['ldap_hr_departments'] ?? ''));
+        $isDeptsRaw  = trim((string) ($this->appConfig['ldap_is_departments'] ?? ''));
+        $groupsConfigured = $hrGroupsRaw !== '' || $isGroupsRaw !== ''
+            || $hrOusRaw !== '' || $isOusRaw !== ''
+            || $hrDeptsRaw !== '' || $isDeptsRaw !== '';
+
+        if ($groupsConfigured) {
+            $role = $this->resolveRoleFromLdapProfile($profile);
+            if ($role === null) {
+                throw new \RuntimeException(
+                    'Access denied: your account is not a member of an authorised group (HR or Information Systems).',
+                    403
+                );
+            }
+            return $this->upsertLdapUser($identifier, $profile, $role);
+        }
+
+        // ── Fallback: groups not configured — use DB lookup + developer override
         $emailCandidates = [];
         $profileEmail = strtolower(trim((string) ($profile['email'] ?? '')));
         $inputEmail = strtolower(trim($identifier));
@@ -142,10 +198,90 @@ final class HrApiController
         }
 
         if ($this->isDeveloperOverrideUser($identifier, $profile)) {
-            return $this->upsertDeveloperUser($identifier, $profile);
+            return $this->upsertLdapUser($identifier, $profile, Authorization::ROLE_HR);
         }
 
         throw new \RuntimeException('LDAP authenticated, but user is not provisioned for HR Console', 403);
+    }
+
+    /**
+     * Resolve an HR Console role from the LDAP profile using three layers:
+     *   1. Group membership (memberOf)
+     *   2. OU path in the user's distinguishedName
+     *   3. AD department attribute
+     *
+     * Returns ROLE_HR on any match, null if none matched.
+     *
+     * Config values use pipe (|) as delimiter so full DNs with commas are safe.
+     */
+    private function resolveRoleFromLdapProfile(array $profile): ?string
+    {
+        // Helper: split pipe-delimited config value into lowercase trimmed tokens.
+        $split = static function (string $raw): array {
+            return array_values(array_filter(array_map(
+                static fn (string $v): string => strtolower(trim($v)),
+                explode('|', $raw)
+            )));
+        };
+
+        $hrGroups      = $split((string) ($this->appConfig['ldap_hr_groups'] ?? ''));
+        $isGroups      = $split((string) ($this->appConfig['ldap_is_groups'] ?? ''));
+        $hrOus         = $split((string) ($this->appConfig['ldap_hr_ous'] ?? ''));
+        $isOus         = $split((string) ($this->appConfig['ldap_is_ous'] ?? ''));
+        $hrDepts       = $split((string) ($this->appConfig['ldap_hr_departments'] ?? ''));
+        $isDepts       = $split((string) ($this->appConfig['ldap_is_departments'] ?? ''));
+
+        $nothingConfigured = empty($hrGroups) && empty($isGroups)
+            && empty($hrOus) && empty($isOus)
+            && empty($hrDepts) && empty($isDepts);
+
+        if ($nothingConfigured) {
+            return null;
+        }
+
+        // ── Layer 1: group membership ────────────────────────────────────────
+        foreach (($profile['groups'] ?? []) as $groupDn) {
+            $normDn = strtolower(trim($groupDn));
+            // Match full DN
+            if (in_array($normDn, $hrGroups, true) || in_array($normDn, $isGroups, true)) {
+                return Authorization::ROLE_HR;
+            }
+            // Match by CN alone (e.g. config value "HR" matches "CN=HR,OU=...")
+            if (preg_match('/^cn=([^,]+)/i', $groupDn, $m)) {
+                $cn = strtolower(trim($m[1]));
+                if (in_array($cn, $hrGroups, true) || in_array($cn, $isGroups, true)) {
+                    return Authorization::ROLE_HR;
+                }
+            }
+        }
+
+        // ── Layer 2: OU path in distinguishedName ────────────────────────────
+        // e.g. "OU=Information Services" is a substring of the user's full DN
+        $userDn = strtolower(trim((string) ($profile['distinguished_name'] ?? '')));
+        if ($userDn !== '') {
+            foreach ($hrOus as $ou) {
+                if ($ou !== '' && str_contains($userDn, strtolower($ou))) {
+                    return Authorization::ROLE_HR;
+                }
+            }
+            foreach ($isOus as $ou) {
+                if ($ou !== '' && str_contains($userDn, strtolower($ou))) {
+                    return Authorization::ROLE_HR;
+                }
+            }
+        }
+
+        // ── Layer 3: department attribute ────────────────────────────────────
+        $userDept = strtolower(trim((string) ($profile['department'] ?? '')));
+        if ($userDept !== '') {
+            foreach (array_merge($hrDepts, $isDepts) as $dept) {
+                if ($dept !== '' && $userDept === strtolower($dept)) {
+                    return Authorization::ROLE_HR;
+                }
+            }
+        }
+
+        return null;
     }
 
     private function isDeveloperOverrideUser(string $identifier, array $profile): bool
@@ -180,7 +316,7 @@ final class HrApiController
         return false;
     }
 
-    private function upsertDeveloperUser(string $identifier, array $profile): array
+    private function upsertLdapUser(string $identifier, array $profile, string $role): array
     {
         $email = strtolower(trim((string) ($profile['email'] ?? '')));
         if ($email === '') {
@@ -199,7 +335,7 @@ final class HrApiController
             }
         }
         if ($email === '') {
-            throw new \RuntimeException('LDAP developer override requires a resolvable email address', 403);
+            throw new \RuntimeException('LDAP user requires a resolvable email address', 403);
         }
 
         $name = trim((string) ($profile['name'] ?? ''));
@@ -207,21 +343,21 @@ final class HrApiController
             $name = trim((string) ($profile['username'] ?? $identifier));
         }
 
-        // Local password is unused for LDAP users; this placeholder keeps schema requirements satisfied.
+        // LDAP users have no local password; placeholder satisfies schema constraints.
         $placeholderHash = password_hash(bin2hex(random_bytes(16)), PASSWORD_BCRYPT);
 
         $upsert = $this->db->prepare(
             'INSERT INTO users (name, email, password_hash, role, is_active) VALUES (?, ?, ?, ?, 1)
              ON DUPLICATE KEY UPDATE name = VALUES(name), role = VALUES(role), is_active = VALUES(is_active)'
         );
-        $upsert->execute([$name, $email, $placeholderHash, Authorization::ROLE_HR]);
+        $upsert->execute([$name, $email, $placeholderHash, $role]);
 
         $find = $this->db->prepare('SELECT id, name, email, password_hash, role FROM users WHERE email = ? AND is_active = 1');
         $find->execute([$email]);
         $user = $find->fetch(PDO::FETCH_ASSOC);
 
         if (!$user) {
-            throw new \RuntimeException('Unable to provision developer override user', 500);
+            throw new \RuntimeException('Unable to provision LDAP user', 500);
         }
 
         return $user;

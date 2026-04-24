@@ -189,7 +189,7 @@ final class LdapAuthService
 
         // Mirrors AD.cs search intent and adds UPN/email support.
         $filter = '(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=' . $escapedUsername . ')(employeeID=' . $escapedUsername . ')' . $upnFilter . $mailFilter . ')))';
-        $attributes = ['dn', 'displayName', 'mail', 'sAMAccountName', 'userPrincipalName'];
+        $attributes = ['dn', 'displayName', 'mail', 'sAMAccountName', 'userPrincipalName', 'memberOf', 'department', 'distinguishedName'];
         $search = @ldap_search($connection, $baseDn, $filter, $attributes);
 
         if ($search === false) {
@@ -205,7 +205,7 @@ final class LdapAuthService
     }
 
     /**
-     * @return array{name:string,email:string,username:string,email_upn:string}
+     * @return array{name:string,email:string,username:string,email_upn:string,groups:list<string>}
      */
     private function mapProfileFromEntry(array $entry, string $identifier): array
     {
@@ -220,11 +220,31 @@ final class LdapAuthService
             $displayName = $samAccountName !== '' ? $samAccountName : $username;
         }
 
+        // Collect all group DNs from the memberOf attribute.
+        $rawGroups = $entry['memberof'] ?? [];
+        $groups = [];
+        $groupCount = (int) ($rawGroups['count'] ?? 0);
+        for ($i = 0; $i < $groupCount; $i++) {
+            $dn = trim((string) ($rawGroups[$i] ?? ''));
+            if ($dn !== '') {
+                $groups[] = $dn;
+            }
+        }
+
+        // distinguishedName — used for OU-based access matching.
+        $distinguishedName = trim((string) ($entry['distinguishedname'][0] ?? $entry['dn'] ?? ''));
+
+        // department — used for department-based access matching.
+        $department = trim((string) ($entry['department'][0] ?? ''));
+
         return [
-            'name' => $displayName,
-            'email' => $foundEmail,
-            'email_upn' => $upn,
-            'username' => $samAccountName !== '' ? $samAccountName : $username,
+            'name'              => $displayName,
+            'email'             => $foundEmail,
+            'email_upn'         => $upn,
+            'username'          => $samAccountName !== '' ? $samAccountName : $username,
+            'groups'            => $groups,
+            'distinguished_name' => $distinguishedName,
+            'department'        => $department,
         ];
     }
 

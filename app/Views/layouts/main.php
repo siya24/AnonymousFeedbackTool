@@ -23,6 +23,7 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto align-items-center">
                     <li class="nav-item"><a class="nav-link" href="/" style="color: #9d2722;"><i class="fas fa-home me-1"></i>Home</a></li>
+                    <?php if ((strtolower(trim((string) (getenv('APP_MODE') ?: 'full'))) === 'full')): ?>
                     <li class="nav-item"><a class="nav-link" href="/hr" style="color: #008AC4;"><i class="fas fa-shield-alt me-1"></i>HR Console</a></li>
                     <li class="nav-item ms-2" id="nav-hr-login-item">
                         <a class="btn btn-primary btn-sm" href="/hr" id="nav-hr-login">
@@ -34,6 +35,7 @@
                             <i class="fas fa-sign-out-alt me-1"></i>Logout
                         </button>
                     </li>
+                    <?php endif; ?>
                 </ul>
             </div>
         </div>

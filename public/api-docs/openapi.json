@@ -1,0 +1,1154 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Voice Without Fear API",
+    "description": "Anonymous Feedback Tool for Legal Aid South Africa. Public endpoints are accessible without authentication. HR endpoints require a JWT Bearer token obtained via `/api/hr/login`.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Legal Aid South Africa - IT Support"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Local development server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "Category": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 1 },
+          "name": { "type": "string", "example": "Workplace Harassment" },
+          "description": { "type": "string", "nullable": true, "example": "Reports related to workplace harassment" },
+          "is_active": { "type": "boolean", "example": true }
+        }
+      },
+      "Status": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 1 },
+          "name": { "type": "string", "example": "Investigation pending" },
+          "is_active": { "type": "boolean", "example": true }
+        }
+      },
+      "FeedbackReport": {
+        "type": "object",
+        "properties": {
+          "reference_no": { "type": "string", "example": "AF-20260424-ABC123" },
+          "category": { "type": "string", "example": "Workplace Harassment" },
+          "description": { "type": "string", "example": "Details of the incident..." },
+          "status": { "type": "string", "example": "Investigation pending" },
+          "created_at": { "type": "string", "format": "date-time", "example": "2026-04-24T10:00:00Z" },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "integer" },
+                "filename": { "type": "string", "example": "evidence.pdf" },
+                "mime_type": { "type": "string", "example": "application/pdf" },
+                "download_url": { "type": "string", "example": "/api/attachments/42" }
+              }
+            }
+          },
+          "updates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "update_text": { "type": "string" },
+                "created_at": { "type": "string", "format": "date-time" }
+              }
+            }
+          }
+        }
+      },
+      "HrCase": {
+        "type": "object",
+        "properties": {
+          "reference_no": { "type": "string", "example": "AF-20260424-ABC123" },
+          "category": { "type": "string", "example": "Workplace Harassment" },
+          "description": { "type": "string" },
+          "status": { "type": "string", "example": "Investigation pending" },
+          "status_id": { "type": "integer", "example": 1 },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PaginatedCases": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/HrCase" }
+          },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "total": { "type": "integer", "example": 42 },
+              "page": { "type": "integer", "example": 1 },
+              "per_page": { "type": "integer", "example": 20 },
+              "total_pages": { "type": "integer", "example": 3 }
+            }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string", "example": "Not found" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/feedback": {
+      "post": {
+        "tags": ["Public - Feedback"],
+        "summary": "Submit anonymous feedback",
+        "description": "Submit a new anonymous feedback report. Supports multipart file attachments.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["category", "description"],
+                "properties": {
+                  "category": { "type": "string", "example": "Workplace Harassment", "description": "Category name (must match an active category)" },
+                  "description": { "type": "string", "maxLength": 5000, "example": "Detailed description of the incident..." },
+                  "attachments[]": {
+                    "type": "array",
+                    "items": { "type": "string", "format": "binary" },
+                    "description": "Optional file attachments (PDF, Word, images, max 10MB each)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Feedback submitted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "reference_no": { "type": "string", "example": "AF-20260424-ABC123" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/feedback/update": {
+      "post": {
+        "tags": ["Public - Feedback"],
+        "summary": "Submit a follow-up update",
+        "description": "Add a follow-up message to an existing anonymous feedback case.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["reference_no", "update_text"],
+                "properties": {
+                  "reference_no": { "type": "string", "example": "AF-20260424-ABC123" },
+                  "update_text": { "type": "string", "maxLength": 5000, "example": "Additional information about the case..." },
+                  "attachments[]": {
+                    "type": "array",
+                    "items": { "type": "string", "format": "binary" },
+                    "description": "Optional additional file attachments"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Follow-up submitted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Reference number not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/feedback/{reference}": {
+      "get": {
+        "tags": ["Public - Feedback"],
+        "summary": "Retrieve feedback by reference number",
+        "description": "Look up a feedback case using its reference number. Returns case details, status, and updates.",
+        "parameters": [
+          {
+            "name": "reference",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "example": "AF-20260424-ABC123"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Feedback case found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": { "$ref": "#/components/schemas/FeedbackReport" }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Reference not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports": {
+      "get": {
+        "tags": ["Public - Feedback"],
+        "summary": "List public reports",
+        "description": "Retrieve a filtered list of anonymised public reports.",
+        "parameters": [
+          { "name": "reference_no", "in": "query", "schema": { "type": "string" }, "description": "Filter by reference number" },
+          { "name": "category", "in": "query", "schema": { "type": "string" }, "description": "Filter by category name" },
+          { "name": "status", "in": "query", "schema": { "type": "string" }, "description": "Filter by status name" },
+          { "name": "date", "in": "query", "schema": { "type": "string", "format": "date" }, "description": "Filter by submission date (YYYY-MM-DD)" }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of reports",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/FeedbackReport" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/attachments/{id}": {
+      "get": {
+        "tags": ["Public - Feedback"],
+        "summary": "Download an attachment",
+        "description": "Download a file attachment by its ID. Returns the file with the appropriate Content-Type header.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" },
+            "example": 42
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File download",
+            "content": {
+              "application/octet-stream": {
+                "schema": { "type": "string", "format": "binary" }
+              }
+            }
+          },
+          "404": {
+            "description": "Attachment not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/categories": {
+      "get": {
+        "tags": ["Public - Categories"],
+        "summary": "List active categories",
+        "description": "Returns all active feedback categories available for submission.",
+        "responses": {
+          "200": {
+            "description": "List of active categories",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Category" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/categories/{id}": {
+      "get": {
+        "tags": ["Public - Categories"],
+        "summary": "Get category by ID",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "example": 1 }
+        ],
+        "responses": {
+          "200": {
+            "description": "Category details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": { "$ref": "#/components/schemas/Category" }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Category not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/statuses": {
+      "get": {
+        "tags": ["Public - Statuses"],
+        "summary": "List active statuses",
+        "description": "Returns all active case statuses.",
+        "responses": {
+          "200": {
+            "description": "List of active statuses",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Status" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/statuses/{id}": {
+      "get": {
+        "tags": ["Public - Statuses"],
+        "summary": "Get status by ID",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "example": 1 }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": { "$ref": "#/components/schemas/Status" }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Status not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hr/login": {
+      "post": {
+        "tags": ["HR - Authentication"],
+        "summary": "HR login",
+        "description": "Authenticate an HR user. Returns a JWT Bearer token. Supports local DB and Active Directory (LDAP) authentication.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": {
+                  "username": { "type": "string", "example": "hruser" },
+                  "password": { "type": "string", "format": "password", "example": "secret" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "token": { "type": "string", "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "integer" },
+                        "username": { "type": "string" },
+                        "full_name": { "type": "string" },
+                        "role": { "type": "string", "example": "hr" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hr/logout": {
+      "post": {
+        "tags": ["HR - Authentication"],
+        "summary": "HR logout",
+        "description": "Invalidate the current HR session token.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Logged out successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorised",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hr/me": {
+      "get": {
+        "tags": ["HR - Authentication"],
+        "summary": "Get current HR user",
+        "description": "Returns profile information for the authenticated HR user.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Current user details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "integer" },
+                        "username": { "type": "string" },
+                        "full_name": { "type": "string" },
+                        "role": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorised",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hr/cases": {
+      "get": {
+        "tags": ["HR - Cases"],
+        "summary": "List all feedback cases (paginated)",
+        "description": "Returns a paginated list of all feedback cases. Supports filtering by category and status.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 }, "description": "Page number" },
+          { "name": "per_page", "in": "query", "schema": { "type": "integer", "default": 20, "maximum": 100 }, "description": "Results per page" },
+          { "name": "category", "in": "query", "schema": { "type": "string" }, "description": "Filter by category name" },
+          { "name": "status", "in": "query", "schema": { "type": "string" }, "description": "Filter by status name" },
+          { "name": "reference_no", "in": "query", "schema": { "type": "string" }, "description": "Filter by reference number" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of cases",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": { "$ref": "#/components/schemas/PaginatedCases" }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorised",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hr/cases/{reference}": {
+      "get": {
+        "tags": ["HR - Cases"],
+        "summary": "Get case details",
+        "description": "Retrieve full details of a specific feedback case including updates and attachments.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "reference", "in": "path", "required": true, "schema": { "type": "string" }, "example": "AF-20260424-ABC123" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Case details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": { "$ref": "#/components/schemas/HrCase" }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Case not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["HR - Cases"],
+        "summary": "Update a feedback case",
+        "description": "Update the status or add HR notes to a feedback case.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "reference", "in": "path", "required": true, "schema": { "type": "string" }, "example": "AF-20260424-ABC123" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": { "type": "string", "example": "Investigation in progress" },
+                  "hr_notes": { "type": "string", "example": "Initial review completed. Escalating to senior HR." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Case updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Case not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hr/dashboard/trends": {
+      "get": {
+        "tags": ["HR - Dashboard"],
+        "summary": "Get dashboard trend data",
+        "description": "Returns aggregate statistics and trend data for the HR dashboard charts.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Dashboard trend data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "by_category": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "category": { "type": "string" },
+                              "count": { "type": "integer" }
+                            }
+                          }
+                        },
+                        "by_status": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "status": { "type": "string" },
+                              "count": { "type": "integer" }
+                            }
+                          }
+                        },
+                        "by_month": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "month": { "type": "string", "example": "2026-04" },
+                              "count": { "type": "integer" }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorised",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hr/categories": {
+      "get": {
+        "tags": ["HR - Categories"],
+        "summary": "List all categories",
+        "description": "Returns all categories (including inactive) for HR management.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "All categories",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Category" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorised",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["HR - Categories"],
+        "summary": "Create a category",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string", "example": "Fraud" },
+                  "description": { "type": "string", "example": "Reports involving financial fraud" },
+                  "is_active": { "type": "boolean", "example": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Category created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": { "$ref": "#/components/schemas/Category" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hr/categories/{id}": {
+      "get": {
+        "tags": ["HR - Categories"],
+        "summary": "Get category by ID",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "example": 1 }
+        ],
+        "responses": {
+          "200": {
+            "description": "Category details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": { "$ref": "#/components/schemas/Category" }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["HR - Categories"],
+        "summary": "Update a category",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "example": 1 }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string", "example": "Updated Category Name" },
+                  "description": { "type": "string" },
+                  "is_active": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Category updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": { "$ref": "#/components/schemas/Category" }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["HR - Categories"],
+        "summary": "Delete a category",
+        "description": "Soft-deletes a category (marks as inactive) if it has associated reports, otherwise removes it.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "example": 1 }
+        ],
+        "responses": {
+          "200": {
+            "description": "Category deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hr/statuses": {
+      "get": {
+        "tags": ["HR - Statuses"],
+        "summary": "List all statuses",
+        "description": "Returns all statuses (including inactive) for HR management.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "All statuses",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Status" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorised",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["HR - Statuses"],
+        "summary": "Create a status",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string", "example": "Awaiting evidence" },
+                  "is_active": { "type": "boolean", "example": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Status created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": { "$ref": "#/components/schemas/Status" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hr/statuses/{id}": {
+      "get": {
+        "tags": ["HR - Statuses"],
+        "summary": "Get status by ID",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "example": 1 }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": { "$ref": "#/components/schemas/Status" }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["HR - Statuses"],
+        "summary": "Update a status",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "example": 1 }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string", "example": "Updated Status Name" },
+                  "is_active": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Status updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": { "$ref": "#/components/schemas/Status" }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["HR - Statuses"],
+        "summary": "Delete a status",
+        "description": "Deletes a status. Will fail if the status is still assigned to active cases.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" }, "example": 1 }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cannot delete — status in use",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    { "name": "Public - Feedback", "description": "Anonymous feedback submission and lookup (no auth required)" },
+    { "name": "Public - Categories", "description": "Read-only category listing (no auth required)" },
+    { "name": "Public - Statuses", "description": "Read-only status listing (no auth required)" },
+    { "name": "HR - Authentication", "description": "HR user login and session management" },
+    { "name": "HR - Cases", "description": "HR management of feedback cases (JWT required)" },
+    { "name": "HR - Dashboard", "description": "HR analytics and dashboard data (JWT required)" },
+    { "name": "HR - Categories", "description": "HR CRUD for feedback categories (JWT required)" },
+    { "name": "HR - Statuses", "description": "HR CRUD for case statuses (JWT required)" }
+  ]
+}

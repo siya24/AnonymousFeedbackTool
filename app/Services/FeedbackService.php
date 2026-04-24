@@ -59,7 +59,14 @@ class FeedbackService {
         // Log audit trail
         $this->repository->logAudit('anonymous', 'followup_submitted', $reference,
             "Follow-up submitted: {$updateReference}");
-        
+
+        // Notify HR of the reporter's follow-up
+        $this->notificationService->notifyFollowUpSubmitted(
+            (int)$report['id'],
+            $reference,
+            (string)($report['category'] ?? '')
+        );
+
         return [
             'success' => true,
             'update_reference' => $updateReference,

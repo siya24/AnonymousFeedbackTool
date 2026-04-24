@@ -31,7 +31,7 @@
                     </button>
                 </div>
             </form>
-            <div id="hr-login-note" class="text-muted small mt-2">Login to view feedback cases and update them on a separate page.</div>
+            <div id="hr-login-note" class="text-muted small mt-2">Login to view feedback cases and update them.</div>
         </div>
     </div>
 

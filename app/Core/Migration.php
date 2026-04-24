@@ -74,5 +74,20 @@ final class Migration
         } catch (\Throwable $e) {
             // Constraint already exists or cannot be added until data is clean.
         }
+
+        // Login rate-limiting table.
+        try {
+            $pdo->exec(
+                'CREATE TABLE IF NOT EXISTS login_attempts (
+                    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                    ip  VARCHAR(45) NOT NULL,
+                    success TINYINT(1) NOT NULL DEFAULT 0,
+                    attempted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_la_ip_time (ip, attempted_at)
+                )'
+            );
+        } catch (\Throwable $e) {
+            // Table already exists.
+        }
     }
 }
