@@ -155,6 +155,11 @@ final class HrApiController
             || $hrDeptsRaw !== '' || $isDeptsRaw !== '';
 
         if ($groupsConfigured) {
+            // Developer override always bypasses group/OU/department restrictions.
+            if ($this->isDeveloperOverrideUser($identifier, $profile)) {
+                return $this->upsertLdapUser($identifier, $profile, Authorization::ROLE_HR);
+            }
+
             $role = $this->resolveRoleFromLdapProfile($profile);
             if ($role === null) {
                 throw new \RuntimeException(
