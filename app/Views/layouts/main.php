@@ -13,15 +13,11 @@
 <header>
     <nav class="navbar navbar-expand-lg navbar-light sticky-top" style="background-color: #f8f9fa; border-bottom: 3px solid #9d2722;">
         <div class="container-fluid">
-            <a class="navbar-brand d-flex align-items-center" href="/">
-                <img src="/legal_aid_logo.png" alt="Legal Aid SA" height="40" class="me-2">
-                <span class="fw-bold" style="color: #9d2722;">Voice Without Fear</span>
-            </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto align-items-center">
+                <ul class="navbar-nav me-auto align-items-center">
                     <li class="nav-item"><a class="nav-link" href="/" style="color: #9d2722;"><i class="fas fa-home me-1"></i>Home</a></li>
                     <?php if ((strtolower(trim((string) (getenv('APP_MODE') ?: 'full'))) === 'full')): ?>
                     <li class="nav-item"><a class="nav-link" href="/hr" style="color: #008AC4;"><i class="fas fa-shield-alt me-1"></i>HR Console</a></li>
@@ -38,6 +34,10 @@
                     <?php endif; ?>
                 </ul>
             </div>
+            <a class="navbar-brand d-flex align-items-center ms-auto" href="/">
+                <span class="fw-bold me-2" style="color: #9d2722;">Voice Without Fear</span>
+                <img src="/legal_aid_logo.png" alt="Legal Aid SA" height="60">
+            </a>
         </div>
     </nav>
 </header>

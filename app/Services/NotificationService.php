@@ -14,8 +14,38 @@ class NotificationService
         private EmailTemplateRenderer $templateRenderer,
         private string $defaultHrEmail,
         private string $defaultEthicsEmail,
-        private string $baseUrl = 'http://localhost:8000',
-    ) {}
+        private string $baseUrl = '',
+    ) {
+        if (empty($this->baseUrl)) {
+            $configured = getenv('APP_BASE_URL');
+            $this->baseUrl = ($configured !== false && $configured !== '')
+                ? $configured
+                : self::detectBaseUrl();
+        }
+    }
+
+    private static function detectBaseUrl(): string
+    {
+        // In CLI context (cron jobs) there is no HTTP request — APP_BASE_URL must be set.
+        if (PHP_SAPI === 'cli') {
+            return 'http://localhost';
+        }
+
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $host   = $_SERVER['HTTP_HOST'] ?? ($_SERVER['SERVER_NAME'] ?? 'localhost');
+        $port   = (int) ($_SERVER['SERVER_PORT'] ?? 80);
+
+        // Only append non-standard ports when HTTP_HOST doesn't already include one
+        if (!str_contains((string) $host, ':')) {
+            if ($scheme === 'https' && $port !== 443) {
+                $host .= ':' . $port;
+            } elseif ($scheme === 'http' && $port !== 80) {
+                $host .= ':' . $port;
+            }
+        }
+
+        return $scheme . '://' . $host;
+    }
 
     public function notifyNewFeedback(int $reportId, string $reference, string $category): void
     {
