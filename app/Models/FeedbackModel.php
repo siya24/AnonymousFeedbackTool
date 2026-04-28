@@ -11,25 +11,45 @@ final class FeedbackModel
     {
     }
 
-    public function createReport(string $category, string $description): array
+    public function createReport(string $category, string $description, ?string $categoryOther = null): array
     {
         $referenceNo = $this->generateReference('AF');
         $now = gmdate('Y-m-d H:i:s');
 
+        $categoryStmt = $this->pdo->prepare('SELECT id FROM categories WHERE name = ? AND is_active = 1 LIMIT 1');
+        $categoryStmt->execute([$category]);
+        $categoryId = (int) ($categoryStmt->fetchColumn() ?: 0);
+        if ($categoryId === 0) {
+            throw new \RuntimeException('Invalid category.');
+        }
+
+        $defaultStatusStmt = $this->pdo->query('SELECT id FROM statuses WHERE is_active = 1 ORDER BY sort_order ASC, name ASC LIMIT 1');
+        $defaultStatusId = (int) ($defaultStatusStmt->fetchColumn() ?: 0);
+        if ($defaultStatusId === 0) {
+            throw new \RuntimeException('No active statuses configured.');
+        }
+
+        $normalizedOther = ($category === 'Other' && $categoryOther !== null && $categoryOther !== '')
+            ? $categoryOther
+            : null;
+
         $stmt = $this->pdo->prepare(
-            'INSERT INTO reports (reference_no, category, description, created_at, updated_at)
-             VALUES (:reference_no, :category, :description, :created_at, :updated_at)'
+            'INSERT INTO reports (reference_no, category_id, category_other, description, status_id, priority, created_at, updated_at)
+             VALUES (:reference_no, :category_id, :category_other, :description, :status_id, :priority, :created_at, :updated_at)'
         );
         $stmt->execute([
-            ':reference_no' => $referenceNo,
-            ':category' => $category,
-            ':description' => $description,
-            ':created_at' => $now,
-            ':updated_at' => $now,
+            ':reference_no'   => $referenceNo,
+            ':category_id'    => $categoryId,
+            ':category_other' => $normalizedOther,
+            ':description'    => $description,
+            ':status_id'      => $defaultStatusId,
+            ':priority'       => 'Normal',
+            ':created_at'     => $now,
+            ':updated_at'     => $now,
         ]);
 
         return [
-            'id' => (int) $this->pdo->lastInsertId(),
+            'id'           => (int) $this->pdo->lastInsertId(),
             'reference_no' => $referenceNo,
         ];
     }
@@ -67,7 +87,13 @@ final class FeedbackModel
 
     public function findByReference(string $referenceNo): ?array
     {
-        $stmt = $this->pdo->prepare('SELECT * FROM reports WHERE reference_no = :reference_no');
+        $stmt = $this->pdo->prepare(
+            'SELECT r.*, s.name AS status, COALESCE(r.category_other, c.name) AS category
+             FROM reports r
+             LEFT JOIN statuses s ON s.id = r.status_id
+             LEFT JOIN categories c ON c.id = r.category_id
+             WHERE r.reference_no = :reference_no'
+        );
         $stmt->execute([':reference_no' => strtoupper($referenceNo)]);
         $row = $stmt->fetch();
         return $row === false ? null : $row;
@@ -75,28 +101,32 @@ final class FeedbackModel
 
     public function listPublicReports(array $filters = []): array
     {
-        $sql = 'SELECT reference_no, category, status, anonymized_summary, outcome_comments, created_at
-                FROM reports WHERE 1=1';
+        $sql = 'SELECT r.reference_no, COALESCE(r.category_other, c.name) AS category,
+                       s.name AS status, r.anonymized_summary, r.outcome_comments, r.created_at
+                FROM reports r
+                LEFT JOIN statuses s ON s.id = r.status_id
+                LEFT JOIN categories c ON c.id = r.category_id
+                WHERE 1=1';
         $params = [];
 
         if (!empty($filters['reference_no'])) {
-            $sql .= ' AND reference_no = :reference_no';
+            $sql .= ' AND r.reference_no = :reference_no';
             $params[':reference_no'] = strtoupper($filters['reference_no']);
         }
         if (!empty($filters['category'])) {
-            $sql .= ' AND category LIKE :category';
+            $sql .= ' AND c.name LIKE :category';
             $params[':category'] = '%' . $filters['category'] . '%';
         }
         if (!empty($filters['status'])) {
-            $sql .= ' AND status = :status';
+            $sql .= ' AND s.name = :status';
             $params[':status'] = $filters['status'];
         }
         if (!empty($filters['date'])) {
-            $sql .= ' AND DATE(created_at) = :date';
+            $sql .= ' AND DATE(r.created_at) = :date';
             $params[':date'] = $filters['date'];
         }
 
-        $sql .= ' ORDER BY created_at DESC';
+        $sql .= ' ORDER BY r.created_at DESC';
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll();
@@ -104,24 +134,28 @@ final class FeedbackModel
 
     public function listCases(array $filters = []): array
     {
-        $sql = 'SELECT id, reference_no, category, status, priority, stage, acknowledged_at, created_at, updated_at
-                FROM reports WHERE 1=1';
+        $sql = 'SELECT r.id, r.reference_no, COALESCE(r.category_other, c.name) AS category,
+                       s.name AS status, r.priority, r.stage, r.acknowledged_at, r.created_at, r.updated_at
+                FROM reports r
+                LEFT JOIN statuses s ON s.id = r.status_id
+                LEFT JOIN categories c ON c.id = r.category_id
+                WHERE 1=1';
         $params = [];
 
         if (!empty($filters['reference_no'])) {
-            $sql .= ' AND reference_no = :reference_no';
+            $sql .= ' AND r.reference_no = :reference_no';
             $params[':reference_no'] = strtoupper($filters['reference_no']);
         }
         if (!empty($filters['category'])) {
-            $sql .= ' AND category LIKE :category';
+            $sql .= ' AND c.name LIKE :category';
             $params[':category'] = '%' . $filters['category'] . '%';
         }
         if (!empty($filters['status'])) {
-            $sql .= ' AND status = :status';
+            $sql .= ' AND s.name = :status';
             $params[':status'] = $filters['status'];
         }
 
-        $sql .= ' ORDER BY created_at DESC';
+        $sql .= ' ORDER BY r.created_at DESC';
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll();
@@ -134,8 +168,18 @@ final class FeedbackModel
             throw new \RuntimeException('Case not found.');
         }
 
-        if (($payload['status'] ?? '') === 'Investigation completed' && trim((string) ($payload['outcome_comments'] ?? '')) === '') {
+        $newStatus = $payload['status'] ?? $report['status'];
+
+        if ($newStatus === 'Investigation completed' && trim((string) ($payload['outcome_comments'] ?? '')) === '') {
             throw new \RuntimeException('Outcome comments are mandatory when status is Investigation completed.');
+        }
+
+        // Resolve status name → id.
+        $statusStmt = $this->pdo->prepare('SELECT id FROM statuses WHERE name = ? LIMIT 1');
+        $statusStmt->execute([$newStatus]);
+        $statusId = (int) ($statusStmt->fetchColumn() ?: 0);
+        if ($statusId === 0) {
+            throw new \RuntimeException('Invalid status selected.');
         }
 
         $acknowledgedAt = !empty($payload['acknowledge'])
@@ -144,29 +188,29 @@ final class FeedbackModel
 
         $stmt = $this->pdo->prepare(
             'UPDATE reports
-             SET status = :status,
-                 priority = :priority,
-                 stage = :stage,
+             SET status_id          = :status_id,
+                 priority           = :priority,
+                 stage              = :stage,
                  anonymized_summary = :anonymized_summary,
-                 action_taken = :action_taken,
-                 outcome_comments = :outcome_comments,
-                 internal_notes = :internal_notes,
-                 acknowledged_at = :acknowledged_at,
-                 updated_at = :updated_at
+                 action_taken       = :action_taken,
+                 outcome_comments   = :outcome_comments,
+                 internal_notes     = :internal_notes,
+                 acknowledged_at    = :acknowledged_at,
+                 updated_at         = :updated_at
              WHERE id = :id'
         );
 
         $stmt->execute([
-            ':status' => $payload['status'] ?? $report['status'],
-            ':priority' => $payload['priority'] ?? $report['priority'],
-            ':stage' => $payload['stage'] ?? $report['stage'],
+            ':status_id'          => $statusId,
+            ':priority'           => $payload['priority'] ?? $report['priority'],
+            ':stage'              => $payload['stage'] ?? $report['stage'],
             ':anonymized_summary' => $payload['anonymized_summary'] ?? $report['anonymized_summary'],
-            ':action_taken' => $payload['action_taken'] ?? $report['action_taken'],
-            ':outcome_comments' => $payload['outcome_comments'] ?? $report['outcome_comments'],
-            ':internal_notes' => $payload['internal_notes'] ?? $report['internal_notes'],
-            ':acknowledged_at' => $acknowledgedAt,
-            ':updated_at' => gmdate('Y-m-d H:i:s'),
-            ':id' => $report['id'],
+            ':action_taken'       => $payload['action_taken'] ?? $report['action_taken'],
+            ':outcome_comments'   => $payload['outcome_comments'] ?? $report['outcome_comments'],
+            ':internal_notes'     => $payload['internal_notes'] ?? $report['internal_notes'],
+            ':acknowledged_at'    => $acknowledgedAt,
+            ':updated_at'         => gmdate('Y-m-d H:i:s'),
+            ':id'                 => $report['id'],
         ]);
     }
 
@@ -214,17 +258,24 @@ final class FeedbackModel
 
     public function logAudit(string $actor, string $action, string $referenceNo, string $details): void
     {
+        $refUpper = strtoupper($referenceNo);
+
+        $reportIdStmt = $this->pdo->prepare('SELECT id FROM reports WHERE reference_no = ? LIMIT 1');
+        $reportIdStmt->execute([$refUpper]);
+        $reportId = ($reportIdStmt->fetchColumn() ?: null);
+
         $stmt = $this->pdo->prepare(
-            'INSERT INTO audit_logs (actor, action, reference_no, details, created_at)
-             VALUES (:actor, :action, :reference_no, :details, :created_at)'
+            'INSERT INTO audit_logs (report_id, actor, action, reference_no, details, created_at)
+             VALUES (:report_id, :actor, :action, :reference_no, :details, :created_at)'
         );
 
         $stmt->execute([
-            ':actor' => $actor,
-            ':action' => $action,
-            ':reference_no' => strtoupper($referenceNo),
-            ':details' => $details,
-            ':created_at' => gmdate('Y-m-d H:i:s'),
+            ':report_id'    => $reportId,
+            ':actor'        => $actor,
+            ':action'       => $action,
+            ':reference_no' => $refUpper,
+            ':details'      => $details,
+            ':created_at'   => gmdate('Y-m-d H:i:s'),
         ]);
     }
 

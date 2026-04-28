@@ -166,6 +166,8 @@ function initPublicForms() {
 
     // Populate category selects from the API
     const categoryNew = byId('category-new');
+    const categoryOtherWrapper = byId('category-other-wrapper');
+    const categoryOtherText = byId('category-other-text');
     const categoryReportFilter = byId('report-filter-category');
     api(`${API_BASE}/categories`).then(data => {
         const opts = (data.data || []).map(c => `<option value="${escHtml(c.name)}">${escHtml(c.name)}</option>`).join('');
@@ -174,6 +176,18 @@ function initPublicForms() {
     }).catch(() => {
         if (categoryNew) categoryNew.innerHTML = '<option value="">-- Select category --</option>';
     });
+
+    if (categoryNew && categoryOtherWrapper && categoryOtherText) {
+        categoryNew.addEventListener('change', () => {
+            const isOther = categoryNew.value === 'Other';
+            categoryOtherWrapper.classList.toggle('d-none', !isOther);
+            categoryOtherText.required = isOther;
+            categoryOtherText.setCustomValidity('');
+        });
+        categoryOtherText.addEventListener('input', () => {
+            categoryOtherText.setCustomValidity('');
+        });
+    }
 
     const statusReportFilter = byId('report-filter-status');
     api(`${API_BASE}/statuses`).then(data => {
@@ -188,9 +202,19 @@ function initPublicForms() {
         newForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             try {
+                const formData = new FormData(newForm);
+                if (categoryNew && categoryNew.value === 'Other' && categoryOtherText) {
+                    const customCategory = categoryOtherText.value.trim();
+                    if (!customCategory) {
+                        categoryOtherText.setCustomValidity('Please specify the category.');
+                        categoryOtherText.reportValidity();
+                        return;
+                    }
+                    formData.set('category_other', customCategory);
+                }
                 const data = await api(`${API_BASE}/feedback`, {
                     method: 'POST',
-                    body: new FormData(newForm),
+                    body: formData,
                 });
 
                 const reference = (data.reference_no || '').toString().trim();
@@ -201,6 +225,8 @@ function initPublicForms() {
 
                 out.classList.add('d-none');
                 newForm.reset();
+                if (categoryOtherWrapper) categoryOtherWrapper.classList.add('d-none');
+                if (categoryOtherText) { categoryOtherText.value = ''; categoryOtherText.required = false; }
             } catch (err) {
                 showNotification(err.message, 'danger');
                 out.classList.remove('d-none');
@@ -257,6 +283,7 @@ function initPublicForms() {
                         <dt class="col-sm-4">Category</dt><dd class="col-sm-8">${escHtml(data.category || '')}</dd>
                         <dt class="col-sm-4">Submitted</dt><dd class="col-sm-8">${escHtml(data.created_at || '')}</dd>
                         <dt class="col-sm-4">Description</dt><dd class="col-sm-8">${escHtml(data.description || '')}</dd>
+                        ${data.anonymized_summary ? `<dt class="col-sm-4">Anonymized Summary</dt><dd class="col-sm-8">${escHtml(data.anonymized_summary)}</dd>` : ''}
                       </dl>
                       ${attachments ? `<hr><p class="fw-semibold mb-1">Attachments</p><ul class="list-group list-group-flush">${attachments}</ul>` : ''}
                       ${updates ? `<hr><p class="fw-semibold mb-1">Updates</p><ul class="list-group list-group-flush">${updates}</ul>` : ''}

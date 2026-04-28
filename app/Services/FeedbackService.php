@@ -23,10 +23,15 @@ class FeedbackService {
     /**
      * Submit new feedback
      */
-    public function submitFeedback(string $category, string $description): array {
+    public function submitFeedback(string $category, string $description, ?string $categoryOther = null): array {
         $reference = $this->generateReference('AF');
-        
-        $reportId = $this->repository->createReport($reference, $category, $description);
+
+        $categoryId = $this->repository->getCategoryIdByName($category);
+        $normalizedOther = ($category === 'Other' && $categoryOther !== null && $categoryOther !== '')
+            ? $categoryOther
+            : null;
+
+        $reportId = $this->repository->createReport($reference, $categoryId, $normalizedOther, $description);
         
         // Log audit trail
         $this->repository->logAudit('anonymous', 'feedback_submitted', $reference, 

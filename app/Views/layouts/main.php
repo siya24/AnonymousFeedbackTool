@@ -43,7 +43,7 @@
 </header>
 <main class="py-4">
     <div class="container-lg">
-        <?php require $viewPath; ?>
+        <?php if (isset($viewPath)) { require $viewPath; } ?>
     </div>
 </main>
 <footer class="py-4 mt-5" style="background-color: #f8f9fa; border-top: 1px solid #98A2B3;">

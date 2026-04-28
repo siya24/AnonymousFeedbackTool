@@ -27,12 +27,17 @@ final class FeedbackApiController
             $input = Request::input();
             $category = trim((string) ($input['category'] ?? ''));
             $description = trim((string) ($input['description'] ?? ''));
+            $categoryOther = trim((string) ($input['category_other'] ?? ''));
 
             if ($category === '' || $description === '' || mb_strlen($description) > 5000) {
                 Response::json(['error' => 'Valid category and description (max 5000 chars) are required.'], 422);
             }
 
-            $result = $this->feedbackService->submitFeedback($category, $description);
+            if ($category === 'Other' && $categoryOther === '') {
+                Response::json(['error' => 'Please specify the category when selecting Other.'], 422);
+            }
+
+            $result = $this->feedbackService->submitFeedback($category, $description, $categoryOther !== '' ? $categoryOther : null);
             
             // Handle attachments
             if (isset($_FILES['attachments'])) {
@@ -116,6 +121,7 @@ final class FeedbackApiController
                 'description' => $detail['report']['description'],
                 'status' => $detail['report']['status'],
                 'created_at' => $detail['report']['created_at'],
+                'anonymized_summary' => $detail['report']['anonymized_summary'] ?? null,
                 'updates' => $detail['updates'],
                 'attachments' => $detail['attachments'],
             ]);

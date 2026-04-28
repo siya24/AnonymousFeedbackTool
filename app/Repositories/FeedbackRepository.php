@@ -28,19 +28,30 @@ class FeedbackRepository {
         return $statusId;
     }
 
+    public function getCategoryIdByName(string $name): int {
+        $stmt = $this->pdo->prepare('SELECT id FROM categories WHERE name = ? AND is_active = 1 LIMIT 1');
+        $stmt->execute([$name]);
+        $categoryId = (int) ($stmt->fetchColumn() ?: 0);
+        if ($categoryId <= 0) {
+            throw new \RuntimeException('Invalid category selected', 422);
+        }
+        return $categoryId;
+    }
+
     /**
      * Create a new feedback report
      */
-    public function createReport(string $reference, string $category, string $description): int {
+    public function createReport(string $reference, int $categoryId, ?string $categoryOther, string $description): int {
         $defaultStatusId = $this->getDefaultStatusId();
         $stmt = $this->pdo->prepare(
-            'INSERT INTO reports (reference_no, category, description, status_id, priority, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, NOW(), NOW())'
+            'INSERT INTO reports (reference_no, category_id, category_other, description, status_id, priority, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())'
         );
         
         $stmt->execute([
             $reference,
-            $category,
+            $categoryId,
+            $categoryOther,
             $description,
             $defaultStatusId,
             'Normal'
@@ -54,9 +65,11 @@ class FeedbackRepository {
      */
     public function findByReference(string $reference): ?array {
         $stmt = $this->pdo->prepare(
-            'SELECT r.*, s.name AS status
+            'SELECT r.*, s.name AS status,
+                    COALESCE(r.category_other, c.name) AS category
              FROM reports r
              LEFT JOIN statuses s ON s.id = r.status_id
+             LEFT JOIN categories c ON c.id = r.category_id
              WHERE r.reference_no = ?'
         );
         $stmt->execute([$reference]);
@@ -91,7 +104,7 @@ class FeedbackRepository {
         }
 
         if (!empty($filters['category'])) {
-            $where .= ' AND r.category = ?';
+            $where .= ' AND c.name = ?';
             $params[] = $filters['category'];
         }
 
@@ -113,9 +126,11 @@ class FeedbackRepository {
      */
     public function listCases(array $filters = []): array {
         $params = [];
-        $query = 'SELECT r.*, s.name AS status
+        $query = 'SELECT r.*, s.name AS status,
+                         COALESCE(r.category_other, c.name) AS category
                   FROM reports r
-                  LEFT JOIN statuses s ON s.id = r.status_id';
+                  LEFT JOIN statuses s ON s.id = r.status_id
+                  LEFT JOIN categories c ON c.id = r.category_id';
         $query .= $this->buildCaseWhereClause($filters, $params);
 
         $allowedSortBy = ['created_at', 'category', 'status', 'reference_no', 'priority'];
@@ -126,7 +141,7 @@ class FeedbackRepository {
 
         $sortColumnMap = [
             'created_at' => 'r.created_at',
-            'category' => 'r.category',
+            'category' => 'c.name',
             'status' => 's.name',
             'reference_no' => 'r.reference_no',
             'priority' => 'r.priority',
@@ -143,7 +158,8 @@ class FeedbackRepository {
         $params = [];
         $query = 'SELECT COUNT(*)
                   FROM reports r
-                  LEFT JOIN statuses s ON s.id = r.status_id';
+                  LEFT JOIN statuses s ON s.id = r.status_id
+                  LEFT JOIN categories c ON c.id = r.category_id';
         $query .= $this->buildCaseWhereClause($filters, $params);
 
         $stmt = $this->pdo->prepare($query);
@@ -157,9 +173,11 @@ class FeedbackRepository {
         $offset = ($page - 1) * $perPage;
 
         $params = [];
-        $query = 'SELECT r.*, s.name AS status
+        $query = 'SELECT r.*, s.name AS status,
+                         COALESCE(r.category_other, c.name) AS category
                   FROM reports r
-                  LEFT JOIN statuses s ON s.id = r.status_id';
+                  LEFT JOIN statuses s ON s.id = r.status_id
+                  LEFT JOIN categories c ON c.id = r.category_id';
         $query .= $this->buildCaseWhereClause($filters, $params);
 
         $allowedSortBy = ['created_at', 'category', 'status', 'reference_no', 'priority'];
@@ -170,7 +188,7 @@ class FeedbackRepository {
 
         $sortColumnMap = [
             'created_at' => 'r.created_at',
-            'category' => 'r.category',
+            'category' => 'c.name',
             'status' => 's.name',
             'reference_no' => 'r.reference_no',
             'priority' => 'r.priority',
@@ -187,9 +205,11 @@ class FeedbackRepository {
      * List public anonymized reports
      */
     public function listPublicReports(array $filters = []): array {
-        $query = 'SELECT r.reference_no, r.category, s.name AS status, r.anonymized_summary, r.outcome_comments, r.created_at 
+        $query = 'SELECT r.reference_no, COALESCE(r.category_other, c.name) AS category,
+                         s.name AS status, r.anonymized_summary, r.outcome_comments, r.created_at
                   FROM reports r
                   LEFT JOIN statuses s ON s.id = r.status_id
+                  LEFT JOIN categories c ON c.id = r.category_id
                   WHERE 1=1';
         $params = [];
 
@@ -199,7 +219,7 @@ class FeedbackRepository {
         }
 
         if (!empty($filters['category'])) {
-            $query .= ' AND r.category = ?';
+            $query .= ' AND c.name = ?';
             $params[] = $filters['category'];
         }
 
@@ -314,12 +334,17 @@ class FeedbackRepository {
      * Log audit trail entry
      */
     public function logAudit(string $actor, string $action, string $reference, string $details): int {
+        // Resolve report_id from reference_no for the FK; stays NULL if not found (e.g. pre-creation events)
+        $reportIdStmt = $this->pdo->prepare('SELECT id FROM reports WHERE reference_no = ? LIMIT 1');
+        $reportIdStmt->execute([$reference]);
+        $reportId = ($reportIdStmt->fetchColumn() ?: null);
+
         $stmt = $this->pdo->prepare(
-            'INSERT INTO audit_logs (actor, action, reference_no, details, created_at)
-             VALUES (?, ?, ?, ?, NOW())'
+            'INSERT INTO audit_logs (report_id, actor, action, reference_no, details, created_at)
+             VALUES (?, ?, ?, ?, ?, NOW())'
         );
-        
-        $stmt->execute([$actor, $action, $reference, $details]);
+
+        $stmt->execute([$reportId, $actor, $action, $reference, $details]);
         return (int) $this->pdo->lastInsertId();
     }
 
@@ -374,8 +399,9 @@ class FeedbackRepository {
      */
     public function getUnacknowledgedReportsNeedingNotification(int $hours, string $kind): array {
         $stmt = $this->pdo->prepare(
-            'SELECT r.id, r.reference_no, r.category, r.created_at
+            'SELECT r.id, r.reference_no, COALESCE(r.category_other, c.name) AS category, r.created_at
              FROM reports r
+             LEFT JOIN categories c ON c.id = r.category_id
              WHERE r.acknowledged_at IS NULL
                AND TIMESTAMPDIFF(HOUR, r.created_at, NOW()) >= ?
                AND NOT EXISTS (
@@ -394,13 +420,14 @@ class FeedbackRepository {
      */
     public function getQuarterlyCategoryTrends(): array {
         $stmt = $this->pdo->query(
-            'SELECT YEAR(created_at) AS year_no,
-                    QUARTER(created_at) AS quarter_no,
-                    category,
+            'SELECT YEAR(r.created_at) AS year_no,
+                    QUARTER(r.created_at) AS quarter_no,
+                    c.name AS category,
                     COUNT(*) AS total_cases
-             FROM reports
-             GROUP BY YEAR(created_at), QUARTER(created_at), category
-             ORDER BY year_no DESC, quarter_no DESC, category ASC'
+             FROM reports r
+             LEFT JOIN categories c ON c.id = r.category_id
+             GROUP BY YEAR(r.created_at), QUARTER(r.created_at), c.name
+             ORDER BY year_no DESC, quarter_no DESC, c.name ASC'
         );
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -427,12 +454,13 @@ class FeedbackRepository {
      */
     public function getCategoryFrequencySummary(): array {
         $stmt = $this->pdo->query(
-            'SELECT r.category,
+            'SELECT c.name AS category,
                     COUNT(*) AS total_cases,
                     SUM(CASE WHEN s.name NOT LIKE \'%completed%\' THEN 1 ELSE 0 END) AS open_cases
              FROM reports r
              LEFT JOIN statuses s ON s.id = r.status_id
-             GROUP BY r.category
+             LEFT JOIN categories c ON c.id = r.category_id
+             GROUP BY c.name
              ORDER BY open_cases DESC, total_cases DESC'
         );
 

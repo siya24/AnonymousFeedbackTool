@@ -31,6 +31,10 @@
                         <option value="">Loading categories...</option>
                     </select>
                 </div>
+                <div class="mb-3 d-none" id="category-other-wrapper">
+                    <label for="category-other-text" class="form-label"><i class="fas fa-pen me-1"></i>Please specify</label>
+                    <input id="category-other-text" type="text" class="form-control" maxlength="255" placeholder="Describe the category...">
+                </div>
                 <div class="mb-3">
                     <label for="description" class="form-label"><i class="fas fa-file-alt me-1"></i>Description (max 5000 characters)</label>
                     <textarea id="description" name="description" class="form-control" maxlength="5000" rows="5" required></textarea>
