@@ -29,13 +29,23 @@ final class FeedbackModel
             throw new \RuntimeException('No active statuses configured.');
         }
 
+        $defaultStageStmt = $this->pdo->query("SELECT id FROM stages WHERE name = 'Logged' AND is_active = 1 LIMIT 1");
+        $defaultStageId = (int) ($defaultStageStmt->fetchColumn() ?: 0);
+        if ($defaultStageId === 0) {
+            $fallbackStageStmt = $this->pdo->query('SELECT id FROM stages WHERE is_active = 1 ORDER BY sort_order ASC, name ASC LIMIT 1');
+            $defaultStageId = (int) ($fallbackStageStmt->fetchColumn() ?: 0);
+        }
+        if ($defaultStageId === 0) {
+            throw new \RuntimeException('No active stages configured.');
+        }
+
         $normalizedOther = ($category === 'Other' && $categoryOther !== null && $categoryOther !== '')
             ? $categoryOther
             : null;
 
         $stmt = $this->pdo->prepare(
-            'INSERT INTO reports (reference_no, category_id, category_other, description, status_id, priority, created_at, updated_at)
-             VALUES (:reference_no, :category_id, :category_other, :description, :status_id, :priority, :created_at, :updated_at)'
+            'INSERT INTO feedbacks (reference_no, category_id, category_other, description, status_id, stage_id, priority, created_at, updated_at)
+             VALUES (:reference_no, :category_id, :category_other, :description, :status_id, :stage_id, :priority, :created_at, :updated_at)'
         );
         $stmt->execute([
             ':reference_no'   => $referenceNo,
@@ -43,6 +53,7 @@ final class FeedbackModel
             ':category_other' => $normalizedOther,
             ':description'    => $description,
             ':status_id'      => $defaultStatusId,
+            ':stage_id'       => $defaultStageId,
             ':priority'       => 'Normal',
             ':created_at'     => $now,
             ':updated_at'     => $now,
@@ -75,7 +86,7 @@ final class FeedbackModel
             ':created_at' => $now,
         ]);
 
-        $this->pdo->prepare('UPDATE reports SET updated_at = :updated_at WHERE id = :id')
+        $this->pdo->prepare('UPDATE feedbacks SET updated_at = :updated_at WHERE id = :id')
             ->execute([':updated_at' => $now, ':id' => $report['id']]);
 
         return [
@@ -87,10 +98,11 @@ final class FeedbackModel
 
     public function findByReference(string $referenceNo): ?array
     {
-        $stmt = $this->pdo->prepare(
-            'SELECT r.*, s.name AS status, COALESCE(r.category_other, c.name) AS category
-             FROM reports r
+                $stmt = $this->pdo->prepare(
+                        'SELECT r.*, s.name AS status, st.name AS stage, COALESCE(r.category_other, c.name) AS category
+               FROM feedbacks r
              LEFT JOIN statuses s ON s.id = r.status_id
+               LEFT JOIN stages st ON st.id = r.stage_id
              LEFT JOIN categories c ON c.id = r.category_id
              WHERE r.reference_no = :reference_no'
         );
@@ -103,7 +115,7 @@ final class FeedbackModel
     {
         $sql = 'SELECT r.reference_no, COALESCE(r.category_other, c.name) AS category,
                        s.name AS status, r.anonymized_summary, r.outcome_comments, r.created_at
-                FROM reports r
+                FROM feedbacks r
                 LEFT JOIN statuses s ON s.id = r.status_id
                 LEFT JOIN categories c ON c.id = r.category_id
                 WHERE 1=1';
@@ -135,9 +147,10 @@ final class FeedbackModel
     public function listCases(array $filters = []): array
     {
         $sql = 'SELECT r.id, r.reference_no, COALESCE(r.category_other, c.name) AS category,
-                       s.name AS status, r.priority, r.stage, r.acknowledged_at, r.created_at, r.updated_at
-                FROM reports r
+                  s.name AS status, r.priority, st.name AS stage, r.acknowledged_at, r.created_at, r.updated_at
+              FROM feedbacks r
                 LEFT JOIN statuses s ON s.id = r.status_id
+              LEFT JOIN stages st ON st.id = r.stage_id
                 LEFT JOIN categories c ON c.id = r.category_id
                 WHERE 1=1';
         $params = [];
@@ -182,15 +195,23 @@ final class FeedbackModel
             throw new \RuntimeException('Invalid status selected.');
         }
 
+        $newStage = $payload['stage'] ?? $report['stage'];
+        $stageStmt = $this->pdo->prepare('SELECT id FROM stages WHERE name = ? LIMIT 1');
+        $stageStmt->execute([$newStage]);
+        $stageId = (int) ($stageStmt->fetchColumn() ?: 0);
+        if ($stageId === 0) {
+            throw new \RuntimeException('Invalid stage selected.');
+        }
+
         $acknowledgedAt = !empty($payload['acknowledge'])
             ? ($report['acknowledged_at'] ?: gmdate('Y-m-d H:i:s'))
             : $report['acknowledged_at'];
 
         $stmt = $this->pdo->prepare(
-            'UPDATE reports
+              'UPDATE feedbacks
              SET status_id          = :status_id,
                  priority           = :priority,
-                 stage              = :stage,
+                  stage_id           = :stage_id,
                  anonymized_summary = :anonymized_summary,
                  action_taken       = :action_taken,
                  outcome_comments   = :outcome_comments,
@@ -203,7 +224,7 @@ final class FeedbackModel
         $stmt->execute([
             ':status_id'          => $statusId,
             ':priority'           => $payload['priority'] ?? $report['priority'],
-            ':stage'              => $payload['stage'] ?? $report['stage'],
+            ':stage_id'           => $stageId,
             ':anonymized_summary' => $payload['anonymized_summary'] ?? $report['anonymized_summary'],
             ':action_taken'       => $payload['action_taken'] ?? $report['action_taken'],
             ':outcome_comments'   => $payload['outcome_comments'] ?? $report['outcome_comments'],
@@ -260,7 +281,7 @@ final class FeedbackModel
     {
         $refUpper = strtoupper($referenceNo);
 
-        $reportIdStmt = $this->pdo->prepare('SELECT id FROM reports WHERE reference_no = ? LIMIT 1');
+        $reportIdStmt = $this->pdo->prepare('SELECT id FROM feedbacks WHERE reference_no = ? LIMIT 1');
         $reportIdStmt->execute([$refUpper]);
         $reportId = ($reportIdStmt->fetchColumn() ?: null);
 

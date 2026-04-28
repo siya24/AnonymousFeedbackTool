@@ -907,6 +907,130 @@ function initHrStatuses() {
     loadStatuses().catch(() => {});
 }
 
+function initHrStages() {
+    const section = byId('hr-stages-section');
+    const stageTable = byId('stage-table');
+    const addBtn = byId('stage-add-btn');
+    const addForm = byId('stage-add-form');
+    const saveBtn = byId('stage-save-btn');
+    const cancelBtn = byId('stage-cancel-btn');
+    const newName = byId('stage-new-name');
+    const newOrder = byId('stage-new-order');
+
+    if (!section) return;
+    if (!TokenManager.hasToken()) {
+        window.location.href = '/hr';
+        return;
+    }
+
+    let editingId = null;
+
+    const renderStageTable = (stages) => {
+        if (!stages.length) {
+            stageTable.innerHTML = '<p class="text-muted">No stages yet.</p>';
+            return;
+        }
+
+        const rows = stages.map((s) => `
+          <tr>
+            <td>${escHtml(s.name)}</td>
+            <td>${s.sort_order}</td>
+            <td><span class="badge ${s.is_active ? 'bg-success' : 'bg-secondary'}">${s.is_active ? 'Active' : 'Inactive'}</span></td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary me-1 stage-edit-btn" data-id="${s.id}" data-name="${escHtml(s.name)}" data-order="${s.sort_order}" data-active="${s.is_active}">
+                <i class="fas fa-edit"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-danger stage-delete-btn" data-id="${s.id}" data-name="${escHtml(s.name)}">
+                <i class="fas fa-trash"></i>
+              </button>
+            </td>
+          </tr>`).join('');
+
+        stageTable.innerHTML = `<table class="table table-sm table-hover">
+          <thead><tr><th>Name</th><th>Sort Order</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${rows}</tbody></table>`;
+
+        stageTable.querySelectorAll('.stage-edit-btn').forEach((btn) => btn.addEventListener('click', () => {
+            editingId = parseInt(btn.dataset.id, 10);
+            newName.value = btn.dataset.name;
+            newOrder.value = btn.dataset.order;
+            addForm.dataset.active = btn.dataset.active;
+            addForm.classList.remove('d-none');
+            saveBtn.textContent = 'Update';
+            newName.focus();
+        }));
+
+        stageTable.querySelectorAll('.stage-delete-btn').forEach((btn) => btn.addEventListener('click', async () => {
+            if (!confirm(`Delete stage "${btn.dataset.name}"? This cannot be undone.`)) return;
+            try {
+                await api(`${API_BASE}/hr/stages/${encodeURIComponent(btn.dataset.id)}`, { method: 'DELETE' });
+                showNotification('Stage deleted.', 'success');
+                await loadStages();
+            } catch (err) {
+                showNotification(err.message, 'danger');
+            }
+        }));
+    };
+
+    const loadStages = async () => {
+        const data = await api(`${API_BASE}/hr/stages`);
+        renderStageTable(data.data || []);
+    };
+
+    window._reloadHrStages = loadStages;
+
+    addBtn?.addEventListener('click', () => {
+        editingId = null;
+        newName.value = '';
+        newOrder.value = '0';
+        delete addForm.dataset.active;
+        addForm.classList.remove('d-none');
+        saveBtn.textContent = 'Save';
+        newName.focus();
+    });
+
+    cancelBtn?.addEventListener('click', () => {
+        addForm.classList.add('d-none');
+        editingId = null;
+    });
+
+    saveBtn?.addEventListener('click', async () => {
+        const name = newName.value.trim();
+        const order = parseInt(newOrder.value, 10) || 0;
+        if (!name) {
+            showNotification('Stage name is required.', 'warning');
+            return;
+        }
+
+        try {
+            if (editingId) {
+                const isActive = addForm.dataset.active !== '0';
+                await api(`${API_BASE}/hr/stages/${encodeURIComponent(editingId)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, is_active: isActive, sort_order: order }),
+                });
+                showNotification('Stage updated.', 'success');
+            } else {
+                await api(`${API_BASE}/hr/stages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, sort_order: order }),
+                });
+                showNotification('Stage created.', 'success');
+            }
+
+            addForm.classList.add('d-none');
+            editingId = null;
+            await loadStages();
+        } catch (err) {
+            showNotification(err.message, 'danger');
+        }
+    });
+
+    loadStages().catch(() => {});
+}
+
 function initNavAuth() {
     const loginItem = byId('nav-hr-login-item');
     const logoutItem = byId('nav-hr-logout-item');
@@ -942,5 +1066,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initHrDashboardPage();
     initHrCategories();
     initHrStatuses();
+    initHrStages();
 });
 

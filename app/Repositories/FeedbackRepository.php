@@ -28,6 +28,34 @@ class FeedbackRepository {
         return $statusId;
     }
 
+    private function getDefaultStageId(): int {
+        $stmt = $this->pdo->query(
+            "SELECT id FROM stages WHERE name = 'Logged' AND is_active = 1 LIMIT 1"
+        );
+        $stageId = (int) ($stmt->fetchColumn() ?: 0);
+        if ($stageId <= 0) {
+            // Fall back to any active stage if 'Logged' does not exist
+            $stmt = $this->pdo->query(
+                'SELECT id FROM stages WHERE is_active = 1 ORDER BY sort_order ASC, name ASC LIMIT 1'
+            );
+            $stageId = (int) ($stmt->fetchColumn() ?: 0);
+        }
+        if ($stageId <= 0) {
+            throw new \RuntimeException('No active stages configured', 500);
+        }
+        return $stageId;
+    }
+
+    private function getStageIdByName(string $name): int {
+        $stmt = $this->pdo->prepare('SELECT id FROM stages WHERE name = ? LIMIT 1');
+        $stmt->execute([$name]);
+        $stageId = (int) ($stmt->fetchColumn() ?: 0);
+        if ($stageId <= 0) {
+            throw new \RuntimeException('Invalid stage selected', 422);
+        }
+        return $stageId;
+    }
+
     public function getCategoryIdByName(string $name): int {
         $stmt = $this->pdo->prepare('SELECT id FROM categories WHERE name = ? AND is_active = 1 LIMIT 1');
         $stmt->execute([$name]);
@@ -43,9 +71,10 @@ class FeedbackRepository {
      */
     public function createReport(string $reference, int $categoryId, ?string $categoryOther, string $description): int {
         $defaultStatusId = $this->getDefaultStatusId();
+        $defaultStageId  = $this->getDefaultStageId();
         $stmt = $this->pdo->prepare(
-            'INSERT INTO reports (reference_no, category_id, category_other, description, status_id, priority, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())'
+            'INSERT INTO feedbacks (reference_no, category_id, category_other, description, status_id, stage_id, priority, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())'
         );
         
         $stmt->execute([
@@ -54,6 +83,7 @@ class FeedbackRepository {
             $categoryOther,
             $description,
             $defaultStatusId,
+            $defaultStageId,
             'Normal'
         ]);
 
@@ -66,10 +96,12 @@ class FeedbackRepository {
     public function findByReference(string $reference): ?array {
         $stmt = $this->pdo->prepare(
             'SELECT r.*, s.name AS status,
-                    COALESCE(r.category_other, c.name) AS category
-             FROM reports r
-             LEFT JOIN statuses s ON s.id = r.status_id
+                    COALESCE(r.category_other, c.name) AS category,
+                    st.name AS stage
+             FROM feedbacks r
+             LEFT JOIN statuses s  ON s.id  = r.status_id
              LEFT JOIN categories c ON c.id = r.category_id
+             LEFT JOIN stages st   ON st.id = r.stage_id
              WHERE r.reference_no = ?'
         );
         $stmt->execute([$reference]);
@@ -127,13 +159,15 @@ class FeedbackRepository {
     public function listCases(array $filters = []): array {
         $params = [];
         $query = 'SELECT r.*, s.name AS status,
-                         COALESCE(r.category_other, c.name) AS category
-                  FROM reports r
-                  LEFT JOIN statuses s ON s.id = r.status_id
-                  LEFT JOIN categories c ON c.id = r.category_id';
+                         COALESCE(r.category_other, c.name) AS category,
+                         st.name AS stage
+                  FROM feedbacks r
+                  LEFT JOIN statuses s   ON s.id  = r.status_id
+                  LEFT JOIN categories c ON c.id  = r.category_id
+                  LEFT JOIN stages st    ON st.id = r.stage_id';
         $query .= $this->buildCaseWhereClause($filters, $params);
 
-        $allowedSortBy = ['created_at', 'category', 'status', 'reference_no', 'priority'];
+        $allowedSortBy = ['created_at', 'category', 'status', 'stage', 'reference_no', 'priority'];
         $sortBy = in_array($filters['sort_by'] ?? 'created_at', $allowedSortBy, true)
             ? (string) $filters['sort_by']
             : 'created_at';
@@ -141,10 +175,11 @@ class FeedbackRepository {
 
         $sortColumnMap = [
             'created_at' => 'r.created_at',
-            'category' => 'c.name',
-            'status' => 's.name',
+            'category'   => 'c.name',
+            'status'     => 's.name',
+            'stage'      => 'st.name',
             'reference_no' => 'r.reference_no',
-            'priority' => 'r.priority',
+            'priority'   => 'r.priority',
         ];
         $query .= ' ORDER BY ' . ($sortColumnMap[$sortBy] ?? 'r.created_at') . ' ' . $sortOrder;
 
@@ -157,9 +192,10 @@ class FeedbackRepository {
     public function countCases(array $filters = []): int {
         $params = [];
         $query = 'SELECT COUNT(*)
-                  FROM reports r
-                  LEFT JOIN statuses s ON s.id = r.status_id
-                  LEFT JOIN categories c ON c.id = r.category_id';
+                  FROM feedbacks r
+                  LEFT JOIN statuses s   ON s.id  = r.status_id
+                  LEFT JOIN categories c ON c.id  = r.category_id
+                  LEFT JOIN stages st    ON st.id = r.stage_id';
         $query .= $this->buildCaseWhereClause($filters, $params);
 
         $stmt = $this->pdo->prepare($query);
@@ -174,13 +210,15 @@ class FeedbackRepository {
 
         $params = [];
         $query = 'SELECT r.*, s.name AS status,
-                         COALESCE(r.category_other, c.name) AS category
-                  FROM reports r
-                  LEFT JOIN statuses s ON s.id = r.status_id
-                  LEFT JOIN categories c ON c.id = r.category_id';
+                         COALESCE(r.category_other, c.name) AS category,
+                         st.name AS stage
+                  FROM feedbacks r
+                  LEFT JOIN statuses s   ON s.id  = r.status_id
+                  LEFT JOIN categories c ON c.id  = r.category_id
+                  LEFT JOIN stages st    ON st.id = r.stage_id';
         $query .= $this->buildCaseWhereClause($filters, $params);
 
-        $allowedSortBy = ['created_at', 'category', 'status', 'reference_no', 'priority'];
+        $allowedSortBy = ['created_at', 'category', 'status', 'stage', 'reference_no', 'priority'];
         $sortBy = in_array($filters['sort_by'] ?? 'created_at', $allowedSortBy, true)
             ? (string) $filters['sort_by']
             : 'created_at';
@@ -188,10 +226,11 @@ class FeedbackRepository {
 
         $sortColumnMap = [
             'created_at' => 'r.created_at',
-            'category' => 'c.name',
-            'status' => 's.name',
+            'category'   => 'c.name',
+            'status'     => 's.name',
+            'stage'      => 'st.name',
             'reference_no' => 'r.reference_no',
-            'priority' => 'r.priority',
+            'priority'   => 'r.priority',
         ];
         $query .= ' ORDER BY ' . ($sortColumnMap[$sortBy] ?? 'r.created_at') . ' ' . $sortOrder;
         $query .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) $offset;
@@ -207,7 +246,7 @@ class FeedbackRepository {
     public function listPublicReports(array $filters = []): array {
         $query = 'SELECT r.reference_no, COALESCE(r.category_other, c.name) AS category,
                          s.name AS status, r.anonymized_summary, r.outcome_comments, r.created_at
-                  FROM reports r
+                  FROM feedbacks r
                   LEFT JOIN statuses s ON s.id = r.status_id
                   LEFT JOIN categories c ON c.id = r.category_id
                   WHERE 1=1';
@@ -256,6 +295,9 @@ class FeedbackRepository {
                 if ($key === 'status') {
                     $updates[] = 'status_id = ?';
                     $params[] = $this->getStatusIdByName((string) $value);
+                } elseif ($key === 'stage') {
+                    $updates[] = 'stage_id = ?';
+                    $params[] = $this->getStageIdByName((string) $value);
                 } else {
                     $updates[] = "$key = ?";
                     $params[] = $value;
@@ -268,7 +310,7 @@ class FeedbackRepository {
         }
 
         $params[] = $reference;
-        $query = 'UPDATE reports SET ' . implode(', ', $updates) . ', updated_at = NOW() 
+        $query = 'UPDATE feedbacks SET ' . implode(', ', $updates) . ', updated_at = NOW() 
                   WHERE reference_no = ?';
 
         $stmt = $this->pdo->prepare($query);
@@ -335,7 +377,7 @@ class FeedbackRepository {
      */
     public function logAudit(string $actor, string $action, string $reference, string $details): int {
         // Resolve report_id from reference_no for the FK; stays NULL if not found (e.g. pre-creation events)
-        $reportIdStmt = $this->pdo->prepare('SELECT id FROM reports WHERE reference_no = ? LIMIT 1');
+        $reportIdStmt = $this->pdo->prepare('SELECT id FROM feedbacks WHERE reference_no = ? LIMIT 1');
         $reportIdStmt->execute([$reference]);
         $reportId = ($reportIdStmt->fetchColumn() ?: null);
 
@@ -400,7 +442,7 @@ class FeedbackRepository {
     public function getUnacknowledgedReportsNeedingNotification(int $hours, string $kind): array {
         $stmt = $this->pdo->prepare(
             'SELECT r.id, r.reference_no, COALESCE(r.category_other, c.name) AS category, r.created_at
-             FROM reports r
+             FROM feedbacks r
              LEFT JOIN categories c ON c.id = r.category_id
              WHERE r.acknowledged_at IS NULL
                AND TIMESTAMPDIFF(HOUR, r.created_at, NOW()) >= ?
@@ -424,7 +466,7 @@ class FeedbackRepository {
                     QUARTER(r.created_at) AS quarter_no,
                     c.name AS category,
                     COUNT(*) AS total_cases
-             FROM reports r
+             FROM feedbacks r
              LEFT JOIN categories c ON c.id = r.category_id
              GROUP BY YEAR(r.created_at), QUARTER(r.created_at), c.name
              ORDER BY year_no DESC, quarter_no DESC, c.name ASC'
@@ -439,7 +481,7 @@ class FeedbackRepository {
     public function getStatusTotals(): array {
         $stmt = $this->pdo->query(
             'SELECT s.name AS status, COUNT(*) AS total
-             FROM reports r
+             FROM feedbacks r
              LEFT JOIN statuses s ON s.id = r.status_id
              GROUP BY s.name
              ORDER BY total DESC'
@@ -457,7 +499,7 @@ class FeedbackRepository {
             'SELECT c.name AS category,
                     COUNT(*) AS total_cases,
                     SUM(CASE WHEN s.name NOT LIKE \'%completed%\' THEN 1 ELSE 0 END) AS open_cases
-             FROM reports r
+             FROM feedbacks r
              LEFT JOIN statuses s ON s.id = r.status_id
              LEFT JOIN categories c ON c.id = r.category_id
              GROUP BY c.name

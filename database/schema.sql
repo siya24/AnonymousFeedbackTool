@@ -11,8 +11,21 @@ CREATE TABLE IF NOT EXISTS statuses (
     INDEX idx_sort_order (sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Stages table: Configurable internal workflow stages managed by HR
+CREATE TABLE IF NOT EXISTS stages (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(120) NOT NULL UNIQUE,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    sort_order INT UNSIGNED NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+
+    INDEX idx_is_active (is_active),
+    INDEX idx_sort_order (sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Categories table: Configurable feedback categories managed by HR
--- Defined before reports so the FK constraint can be enforced at creation time
+-- Defined before feedbacks so the FK constraint can be enforced at creation time
 CREATE TABLE IF NOT EXISTS categories (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(120) NOT NULL UNIQUE,
@@ -25,16 +38,16 @@ CREATE TABLE IF NOT EXISTS categories (
     INDEX idx_sort_order (sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Reports table: Main feedback submission storage
-CREATE TABLE IF NOT EXISTS reports (
+-- Feedbacks table: Main feedback submission storage
+CREATE TABLE IF NOT EXISTS feedbacks (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     reference_no VARCHAR(40) NOT NULL UNIQUE,
     category_id INT UNSIGNED NOT NULL,
     category_other VARCHAR(255) NULL COMMENT 'Free-text detail when category is Other',
     description TEXT NOT NULL,
     status_id INT UNSIGNED NOT NULL,
+    stage_id INT UNSIGNED NOT NULL,
     priority ENUM('Low', 'Normal', 'High', 'Critical') NOT NULL DEFAULT 'Normal',
-    stage VARCHAR(120) NOT NULL DEFAULT 'Logged',
     anonymized_summary TEXT NULL,
     action_taken TEXT NULL,
     outcome_comments TEXT NULL,
@@ -43,12 +56,14 @@ CREATE TABLE IF NOT EXISTS reports (
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
 
-    CONSTRAINT fk_reports_category FOREIGN KEY (category_id) REFERENCES categories(id),
-    CONSTRAINT fk_reports_status FOREIGN KEY (status_id) REFERENCES statuses(id),
+    CONSTRAINT fk_feedbacks_category FOREIGN KEY (category_id) REFERENCES categories(id),
+    CONSTRAINT fk_feedbacks_status FOREIGN KEY (status_id) REFERENCES statuses(id),
+    CONSTRAINT fk_feedbacks_stage FOREIGN KEY (stage_id) REFERENCES stages(id),
 
     INDEX idx_reference_no (reference_no),
     INDEX idx_category_id (category_id),
     INDEX idx_status_id (status_id),
+    INDEX idx_stage_id (stage_id),
     INDEX idx_priority (priority),
     INDEX idx_created_at (created_at),
     INDEX idx_updated_at (updated_at),
@@ -64,13 +79,13 @@ CREATE TABLE IF NOT EXISTS report_updates (
     update_text TEXT NOT NULL,
     created_at DATETIME NOT NULL,
     
-    CONSTRAINT fk_report_updates_report FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE,
+    CONSTRAINT fk_report_updates_report FOREIGN KEY (report_id) REFERENCES feedbacks(id) ON DELETE CASCADE,
     INDEX idx_report_id (report_id),
     INDEX idx_update_reference_no (update_reference_no),
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Attachments table: File uploads for reports and updates
+-- Attachments table: File uploads for feedbacks and updates
 CREATE TABLE IF NOT EXISTS attachments (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     report_id BIGINT UNSIGNED NULL,
@@ -81,7 +96,7 @@ CREATE TABLE IF NOT EXISTS attachments (
     size_bytes INT UNSIGNED NOT NULL,
     created_at DATETIME NOT NULL,
     
-    CONSTRAINT fk_attachments_report FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE,
+    CONSTRAINT fk_attachments_report FOREIGN KEY (report_id) REFERENCES feedbacks(id) ON DELETE CASCADE,
     CONSTRAINT fk_attachments_update FOREIGN KEY (report_update_id) REFERENCES report_updates(id) ON DELETE CASCADE,
     INDEX idx_report_id (report_id),
     INDEX idx_report_update_id (report_update_id),
@@ -99,7 +114,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     details TEXT NOT NULL,
     created_at DATETIME NOT NULL,
 
-    CONSTRAINT fk_audit_logs_report FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE SET NULL,
+    CONSTRAINT fk_audit_logs_report FOREIGN KEY (report_id) REFERENCES feedbacks(id) ON DELETE SET NULL,
     INDEX idx_report_id (report_id),
     INDEX idx_reference_no (reference_no),
     INDEX idx_actor (actor),
@@ -115,7 +130,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     recipient VARCHAR(100) NOT NULL,
     sent_at DATETIME NOT NULL,
     
-    CONSTRAINT fk_notifications_report FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE,
+    CONSTRAINT fk_notifications_report FOREIGN KEY (report_id) REFERENCES feedbacks(id) ON DELETE CASCADE,
     INDEX idx_report_id (report_id),
     INDEX idx_sent_at (sent_at),
     INDEX idx_kind (kind),

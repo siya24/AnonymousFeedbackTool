@@ -41,6 +41,11 @@ final class PageController
         Response::view('pages/hr_statuses', ['title' => 'Manage Statuses']);
     }
 
+    public function hrStages(array $params = []): void
+    {
+        Response::view('pages/hr_stages', ['title' => 'Manage Stages']);
+    }
+
     public function apiDocs(array $params = []): void
     {
         $viewPath = __DIR__ . '/../../Views/pages/api_docs.php';

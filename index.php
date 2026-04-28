@@ -4,9 +4,11 @@ declare(strict_types=1);
 use App\Controllers\Api\FeedbackApiController;
 use App\Controllers\Api\CategoryApiController;
 use App\Controllers\Api\StatusApiController;
+use App\Controllers\Api\StageApiController;
 use App\Controllers\Api\HrApiController;
 use App\Controllers\Api\HrCategoryApiController;
 use App\Controllers\Api\HrStatusApiController;
+use App\Controllers\Api\HrStageApiController;
 use App\Controllers\Web\PageController;
 use App\Core\Request;
 use App\Core\Router;
@@ -51,6 +53,8 @@ $router->add('GET', '/api/categories', [CategoryApiController::class, 'listActiv
 $router->add('GET', '/api/categories/{id}', [CategoryApiController::class, 'getById']);
 $router->add('GET', '/api/statuses', [StatusApiController::class, 'listActive']);
 $router->add('GET', '/api/statuses/{id}', [StatusApiController::class, 'getById']);
+$router->add('GET', '/api/stages', [StageApiController::class, 'listActive']);
+$router->add('GET', '/api/stages/{id}', [StageApiController::class, 'getById']);
 
 if ($isFullMode) {
     // ── HR Console web routes (intranet only) ─────────────────────────────────
@@ -59,6 +63,7 @@ if ($isFullMode) {
     $router->add('GET', '/hr/dashboard', [PageController::class, 'hrDashboard']);
     $router->add('GET', '/hr/categories', [PageController::class, 'hrCategories']);
     $router->add('GET', '/hr/statuses', [PageController::class, 'hrStatuses']);
+    $router->add('GET', '/hr/stages', [PageController::class, 'hrStages']);
     $router->add('GET', '/api/docs', [PageController::class, 'apiDocs']);
     $router->add('GET', '/api/openapi.json', [PageController::class, 'openApiSpec']);
 
@@ -80,6 +85,11 @@ if ($isFullMode) {
     $router->add('POST', '/api/hr/statuses', [HrStatusApiController::class, 'create']);
     $router->add('PUT', '/api/hr/statuses/{id}', [HrStatusApiController::class, 'update']);
     $router->add('DELETE', '/api/hr/statuses/{id}', [HrStatusApiController::class, 'delete']);
+    $router->add('GET', '/api/hr/stages', [HrStageApiController::class, 'listAll']);
+    $router->add('GET', '/api/hr/stages/{id}', [HrStageApiController::class, 'getById']);
+    $router->add('POST', '/api/hr/stages', [HrStageApiController::class, 'create']);
+    $router->add('PUT', '/api/hr/stages/{id}', [HrStageApiController::class, 'update']);
+    $router->add('DELETE', '/api/hr/stages/{id}', [HrStageApiController::class, 'delete']);
 }
 
 $router->dispatch(Request::method(), Request::path());

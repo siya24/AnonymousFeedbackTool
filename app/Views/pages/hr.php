@@ -11,6 +11,9 @@
             <a href="/hr/statuses" class="btn btn-outline-secondary">
                 <i class="fas fa-stream me-1"></i>Statuses
             </a>
+            <a href="/hr/stages" class="btn btn-outline-secondary">
+                <i class="fas fa-layer-group me-1"></i>Stages
+            </a>
         </div>
     </div>
 

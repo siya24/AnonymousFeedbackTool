@@ -37,3 +37,12 @@ INSERT IGNORE INTO statuses (name, is_active, sort_order, created_at, updated_at
 ('Investigation pending',      1, 1, NOW(), NOW()),
 ('Investigation in progress',  1, 2, NOW(), NOW()),
 ('Investigation completed',    1, 3, NOW(), NOW());
+
+-- Seed default stages (INSERT IGNORE skips if already exists)
+INSERT IGNORE INTO stages (name, is_active, sort_order, created_at, updated_at) VALUES
+('Logged',             1, 1, NOW(), NOW()),
+('Under Review',       1, 2, NOW(), NOW()),
+('Awaiting Response',  1, 3, NOW(), NOW()),
+('Escalated',          1, 4, NOW(), NOW()),
+('Resolved',           1, 5, NOW(), NOW()),
+('Closed',             1, 6, NOW(), NOW());
