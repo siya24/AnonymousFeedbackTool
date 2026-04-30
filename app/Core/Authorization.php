@@ -47,8 +47,8 @@ class Authorization {
     /**
      * Get current user ID
      */
-    public function getUserId(): ?int {
-        return $this->user['user_id'] ?? null;
+    public function getUserId(): ?string {
+        return isset($this->user['user_id']) ? (string) $this->user['user_id'] : null;
     }
 
     /**

@@ -42,7 +42,7 @@ final class FeedbackApiController
             // Handle attachments
             if (isset($_FILES['attachments'])) {
                 $this->feedbackService->storeAttachments(
-                    $result['report_id'],
+                    (string) ($result['feedback_id'] ?? $result['report_id'] ?? ''),
                     null,
                     $_FILES['attachments']
                 );
@@ -78,9 +78,9 @@ final class FeedbackApiController
             // Handle attachments
             if (isset($_FILES['attachments'])) {
                 $reportDetail = $this->feedbackService->getCaseDetails($referenceNo);
-                $reportId = (int) ($reportDetail['report']['id'] ?? 0);
+                $reportFeedbackId = (string) ($reportDetail['report']['id'] ?? '');
                 $this->feedbackService->storeAttachments(
-                    $reportId,
+                    $reportFeedbackId,
                     $result['update_id'],
                     $_FILES['attachments']
                 );

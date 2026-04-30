@@ -18,24 +18,24 @@ final class FeedbackModel
 
         $categoryStmt = $this->pdo->prepare('SELECT id FROM categories WHERE name = ? AND is_active = 1 LIMIT 1');
         $categoryStmt->execute([$category]);
-        $categoryId = (int) ($categoryStmt->fetchColumn() ?: 0);
-        if ($categoryId === 0) {
+        $categoryId = (string) ($categoryStmt->fetchColumn() ?: '');
+        if ($categoryId === '') {
             throw new \RuntimeException('Invalid category.');
         }
 
         $defaultStatusStmt = $this->pdo->query('SELECT id FROM statuses WHERE is_active = 1 ORDER BY sort_order ASC, name ASC LIMIT 1');
-        $defaultStatusId = (int) ($defaultStatusStmt->fetchColumn() ?: 0);
-        if ($defaultStatusId === 0) {
+        $defaultStatusId = (string) ($defaultStatusStmt->fetchColumn() ?: '');
+        if ($defaultStatusId === '') {
             throw new \RuntimeException('No active statuses configured.');
         }
 
         $defaultStageStmt = $this->pdo->query("SELECT id FROM stages WHERE name = 'Logged' AND is_active = 1 LIMIT 1");
-        $defaultStageId = (int) ($defaultStageStmt->fetchColumn() ?: 0);
-        if ($defaultStageId === 0) {
+        $defaultStageId = (string) ($defaultStageStmt->fetchColumn() ?: '');
+        if ($defaultStageId === '') {
             $fallbackStageStmt = $this->pdo->query('SELECT id FROM stages WHERE is_active = 1 ORDER BY sort_order ASC, name ASC LIMIT 1');
-            $defaultStageId = (int) ($fallbackStageStmt->fetchColumn() ?: 0);
+            $defaultStageId = (string) ($fallbackStageStmt->fetchColumn() ?: '');
         }
-        if ($defaultStageId === 0) {
+        if ($defaultStageId === '') {
             throw new \RuntimeException('No active stages configured.');
         }
 
@@ -43,11 +43,19 @@ final class FeedbackModel
             ? $categoryOther
             : null;
 
+        $feedbackId = sprintf('%08x-%04x-%04x-%04x-%012x',
+            random_int(0, 0xFFFFFFFF), random_int(0, 0xFFFF),
+            random_int(0, 0x0FFF) | 0x4000,
+            random_int(0, 0x3FFF) | 0x8000,
+            random_int(0, 0xFFFFFFFFFFFF)
+        );
+
         $stmt = $this->pdo->prepare(
-            'INSERT INTO feedbacks (reference_no, category_id, category_other, description, status_id, stage_id, priority, created_at, updated_at)
-             VALUES (:reference_no, :category_id, :category_other, :description, :status_id, :stage_id, :priority, :created_at, :updated_at)'
+            'INSERT INTO feedbacks (id, reference_no, category_id, category_other, description, status_id, stage_id, priority, created_at, updated_at)
+             VALUES (:id, :reference_no, :category_id, :category_other, :description, :status_id, :stage_id, :priority, :created_at, :updated_at)'
         );
         $stmt->execute([
+            ':id'           => $feedbackId,
             ':reference_no'   => $referenceNo,
             ':category_id'    => $categoryId,
             ':category_other' => $normalizedOther,
@@ -60,7 +68,7 @@ final class FeedbackModel
         ]);
 
         return [
-            'id'           => (int) $this->pdo->lastInsertId(),
+            'id'           => $feedbackId,
             'reference_no' => $referenceNo,
         ];
     }
@@ -75,24 +83,33 @@ final class FeedbackModel
         $updateReference = $this->generateReference('UPD');
         $now = gmdate('Y-m-d H:i:s');
 
+        $updateId = sprintf('%08x-%04x-%04x-%04x-%012x',
+            random_int(0, 0xFFFFFFFF), random_int(0, 0xFFFF),
+            random_int(0, 0x0FFF) | 0x4000,
+            random_int(0, 0x3FFF) | 0x8000,
+            random_int(0, 0xFFFFFFFFFFFF)
+        );
+
         $stmt = $this->pdo->prepare(
-            'INSERT INTO report_updates (report_id, update_reference_no, update_text, created_at)
-             VALUES (:report_id, :update_reference_no, :update_text, :created_at)'
+            'INSERT INTO report_updates (id, feedback_id, update_reference_no, update_text, created_at)
+             VALUES (:id, :feedback_id, :update_reference_no, :update_text, :created_at)'
         );
         $stmt->execute([
-            ':report_id' => $report['id'],
+            ':id'                  => $updateId,
+            ':feedback_id'         => $report['id'],
             ':update_reference_no' => $updateReference,
-            ':update_text' => $updateText,
-            ':created_at' => $now,
+            ':update_text'         => $updateText,
+            ':created_at'          => $now,
         ]);
 
         $this->pdo->prepare('UPDATE feedbacks SET updated_at = :updated_at WHERE id = :id')
             ->execute([':updated_at' => $now, ':id' => $report['id']]);
 
         return [
-            'update_id' => (int) $this->pdo->lastInsertId(),
+            'update_id'          => $updateId,
             'update_reference_no' => $updateReference,
-            'report_id' => (int) $report['id'],
+            'feedback_id'         => (string) $report['id'],
+            'report_id'           => (string) $report['id'],
         ];
     }
 
@@ -190,16 +207,16 @@ final class FeedbackModel
         // Resolve status name → id.
         $statusStmt = $this->pdo->prepare('SELECT id FROM statuses WHERE name = ? LIMIT 1');
         $statusStmt->execute([$newStatus]);
-        $statusId = (int) ($statusStmt->fetchColumn() ?: 0);
-        if ($statusId === 0) {
+        $statusId = (string) ($statusStmt->fetchColumn() ?: '');
+        if ($statusId === '') {
             throw new \RuntimeException('Invalid status selected.');
         }
 
         $newStage = $payload['stage'] ?? $report['stage'];
         $stageStmt = $this->pdo->prepare('SELECT id FROM stages WHERE name = ? LIMIT 1');
         $stageStmt->execute([$newStage]);
-        $stageId = (int) ($stageStmt->fetchColumn() ?: 0);
-        if ($stageId === 0) {
+        $stageId = (string) ($stageStmt->fetchColumn() ?: '');
+        if ($stageId === '') {
             throw new \RuntimeException('Invalid stage selected.');
         }
 
@@ -242,11 +259,11 @@ final class FeedbackModel
             return null;
         }
 
-        $updatesStmt = $this->pdo->prepare('SELECT update_reference_no, update_text, created_at FROM report_updates WHERE report_id = :report_id ORDER BY created_at DESC');
-        $updatesStmt->execute([':report_id' => $report['id']]);
+        $updatesStmt = $this->pdo->prepare('SELECT update_reference_no, update_text, created_at FROM report_updates WHERE feedback_id = :feedback_id ORDER BY created_at DESC');
+        $updatesStmt->execute([':feedback_id' => $report['id']]);
 
-        $attachmentsStmt = $this->pdo->prepare('SELECT original_name, mime_type, size_bytes, created_at FROM attachments WHERE report_id = :report_id ORDER BY created_at DESC');
-        $attachmentsStmt->execute([':report_id' => $report['id']]);
+        $attachmentsStmt = $this->pdo->prepare('SELECT original_name, mime_type, size_bytes, created_at FROM attachments WHERE feedback_id = :feedback_id ORDER BY created_at DESC');
+        $attachmentsStmt->execute([':feedback_id' => $report['id']]);
 
         $auditStmt = $this->pdo->prepare('SELECT actor, action, details, created_at FROM audit_logs WHERE reference_no = :reference_no ORDER BY created_at DESC');
         $auditStmt->execute([':reference_no' => $report['reference_no']]);
@@ -262,12 +279,12 @@ final class FeedbackModel
     public function saveAttachment(int $reportId, ?int $updateId, string $originalName, string $storedName, string $mimeType, int $size): void
     {
         $stmt = $this->pdo->prepare(
-            'INSERT INTO attachments (report_id, report_update_id, original_name, stored_name, mime_type, size_bytes, created_at)
-             VALUES (:report_id, :report_update_id, :original_name, :stored_name, :mime_type, :size_bytes, :created_at)'
+            'INSERT INTO attachments (id, feedback_id, report_update_id, original_name, stored_name, mime_type, size_bytes, created_at)
+             VALUES (UUID(), :feedback_id, :report_update_id, :original_name, :stored_name, :mime_type, :size_bytes, :created_at)'
         );
 
         $stmt->execute([
-            ':report_id' => $reportId,
+            ':feedback_id' => $reportId,
             ':report_update_id' => $updateId,
             ':original_name' => $originalName,
             ':stored_name' => $storedName,
@@ -286,12 +303,12 @@ final class FeedbackModel
         $reportId = ($reportIdStmt->fetchColumn() ?: null);
 
         $stmt = $this->pdo->prepare(
-            'INSERT INTO audit_logs (report_id, actor, action, reference_no, details, created_at)
-             VALUES (:report_id, :actor, :action, :reference_no, :details, :created_at)'
+              'INSERT INTO audit_logs (id, feedback_id, actor, action, reference_no, details, created_at)
+               VALUES (UUID(), :feedback_id, :actor, :action, :reference_no, :details, :created_at)'
         );
 
         $stmt->execute([
-            ':report_id'    => $reportId,
+            ':feedback_id'  => $reportId,
             ':actor'        => $actor,
             ':action'       => $action,
             ':reference_no' => $refUpper,
@@ -303,12 +320,12 @@ final class FeedbackModel
     public function logNotification(int $reportId, string $kind, string $recipient): void
     {
         $stmt = $this->pdo->prepare(
-            'INSERT INTO notifications (report_id, kind, recipient, sent_at)
-             VALUES (:report_id, :kind, :recipient, :sent_at)'
+            'INSERT INTO notifications (id, feedback_id, kind, recipient, sent_at)
+             VALUES (UUID(), :feedback_id, :kind, :recipient, :sent_at)'
         );
 
         $stmt->execute([
-            ':report_id' => $reportId,
+            ':feedback_id' => $reportId,
             ':kind' => $kind,
             ':recipient' => $recipient,
             ':sent_at' => gmdate('Y-m-d H:i:s'),

@@ -31,19 +31,20 @@ class FeedbackService {
             ? $categoryOther
             : null;
 
-        $reportId = $this->repository->createReport($reference, $categoryId, $normalizedOther, $description);
-        
+        $feedbackId = $this->repository->createReport($reference, $categoryId, $normalizedOther, $description);
+
         // Log audit trail
-        $this->repository->logAudit('anonymous', 'feedback_submitted', $reference, 
+        $this->repository->logAudit('anonymous', 'feedback_submitted', $reference,
             "New feedback submitted in category: {$category}");
 
         // Send immediate HR email alert and log notification.
-        $this->notificationService->notifyNewFeedback($reportId, $reference, $category);
-        
+        $this->notificationService->notifyNewFeedback($feedbackId, $reference, $category);
+
         return [
             'success' => true,
             'reference' => $reference,
-            'report_id' => $reportId,
+            'feedback_id' => $feedbackId,
+            'report_id' => $feedbackId,
             'message' => 'Feedback submitted successfully'
         ];
     }
@@ -59,7 +60,7 @@ class FeedbackService {
         }
 
         $updateReference = $this->generateReference('UPD');
-        $updateId = $this->repository->createUpdate((int)$report['id'], $updateReference, $updateText);
+        $updateId = $this->repository->createUpdate((string)$report['id'], $updateReference, $updateText);
         
         // Log audit trail
         $this->repository->logAudit('anonymous', 'followup_submitted', $reference,
@@ -67,7 +68,7 @@ class FeedbackService {
 
         // Notify HR of the reporter's follow-up
         $this->notificationService->notifyFollowUpSubmitted(
-            (int)$report['id'],
+            (string)$report['id'],
             $reference,
             (string)($report['category'] ?? '')
         );
@@ -163,12 +164,12 @@ class FeedbackService {
             unset($updateData['acknowledge']);
         }
 
-        // Update the report
-        $this->repository->updateReport($reference, $updateData);
+        // Update the report and persist direct updater attribution.
+        $this->repository->updateReport($reference, $updateData, $hrUserId);
         
         // Log audit trail
         $details = json_encode($updateData);
-        $this->repository->logAudit("hr:{$hrUserId}", 'case_updated', $reference, $details);
+        $this->repository->logAudit("hr:{$hrUserId}", 'case_updated', $reference, $details, $hrUserId);
         
         return [
             'success' => true,
@@ -180,7 +181,7 @@ class FeedbackService {
     /**
      * Store multiple attachments
      */
-    public function storeAttachments(int $reportId, ?int $updateId, array $files): array {
+    public function storeAttachments(string $feedbackId, ?string $updateId, array $files): array {
         $stored = [];
         $allowed = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'gif', 'mp3', 'wav'];
         $maxSize = 10 * 1024 * 1024; // 10MB
@@ -241,7 +242,7 @@ class FeedbackService {
             $mimeType = $mimeMap[$ext][0] ?? 'application/octet-stream';
             
             $attachmentId = $this->repository->saveAttachment(
-                $reportId,
+                $feedbackId,
                 $updateId,
                 $name,
                 $storedName,

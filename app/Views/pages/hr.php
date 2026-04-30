@@ -1,7 +1,7 @@
 <section class="panel">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
         <h2 class="mb-0"><i class="fas fa-shield-alt me-2" style="color: #008AC4;"></i>HR Management Console</h2>
-        <div class="d-flex gap-2 flex-wrap">
+        <div id="hr-auth-links" class="d-none d-flex gap-2 flex-wrap">
             <a href="/hr/dashboard" class="btn btn-outline-primary">
                 <i class="fas fa-chart-line me-1"></i>Open Dashboard
             </a>

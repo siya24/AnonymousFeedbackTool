@@ -29,8 +29,8 @@ final class StatusApiController
      */
     public function getById(array $params): void
     {
-        $id = (int) ($params['id'] ?? 0);
-        if ($id <= 0) {
+        $id = trim((string) ($params['id'] ?? ''));
+        if ($id === '') {
             Response::json(['error' => 'Invalid status ID'], 400);
         }
 

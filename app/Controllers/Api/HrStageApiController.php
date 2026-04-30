@@ -7,17 +7,25 @@ use App\Core\Authorization;
 use App\Core\Container;
 use App\Core\Request;
 use App\Core\Response;
+use App\Repositories\FeedbackRepository;
 use App\Repositories\StageRepository;
 
 final class HrStageApiController
 {
     private Authorization $auth;
     private StageRepository $stageRepository;
+    private FeedbackRepository $feedbackRepository;
 
     public function __construct()
     {
         $this->auth = Container::get('auth');
         $this->stageRepository = Container::get('stageRepository');
+        $this->feedbackRepository = Container::get('feedbackRepository');
+    }
+
+    private function buildConfigReference(string $prefix, string $entityId): string
+    {
+        return $prefix . '-' . strtoupper(substr($entityId, 0, 8));
     }
 
     public function listAll(array $params = []): void
@@ -38,8 +46,8 @@ final class HrStageApiController
             $this->auth->authenticate();
             $this->auth->requireRole(Authorization::ROLE_HR);
 
-            $id = (int) ($params['id'] ?? 0);
-            if ($id <= 0) {
+            $id = trim((string) ($params['id'] ?? ''));
+            if ($id === '') {
                 Response::json(['error' => 'Invalid stage ID'], 400);
             }
 
@@ -72,7 +80,15 @@ final class HrStageApiController
                 Response::json(['error' => 'Stage name must be 120 characters or less'], 422);
             }
 
-            $id = $this->stageRepository->create($name, $sortOrder);
+            $actorUserId = $this->auth->getUserId();
+            $id = $this->stageRepository->create($name, $sortOrder, $actorUserId);
+            $this->feedbackRepository->logAudit(
+                'hr',
+                'stage_created',
+                $this->buildConfigReference('CFG-STG', $id),
+                json_encode(['stage_id' => $id, 'name' => $name, 'sort_order' => $sortOrder]),
+                $actorUserId
+            );
             Response::json(['data' => $this->stageRepository->findById($id)], 201);
         } catch (\Throwable $e) {
             $code = (int) ($e->getCode() ?: 400);
@@ -90,13 +106,13 @@ final class HrStageApiController
             $this->auth->authenticate();
             $this->auth->requireRole(Authorization::ROLE_HR);
 
-            $id = (int) ($params['id'] ?? 0);
+            $id = trim((string) ($params['id'] ?? ''));
             $input = Request::input();
             $name = trim((string) ($input['name'] ?? ''));
             $isActive = (bool) ($input['is_active'] ?? true);
             $sortOrder = (int) ($input['sort_order'] ?? 0);
 
-            if ($id <= 0) {
+            if ($id === '') {
                 Response::json(['error' => 'Invalid stage ID'], 400);
             }
             if ($name === '') {
@@ -110,7 +126,15 @@ final class HrStageApiController
                 Response::json(['error' => 'Stage not found'], 404);
             }
 
-            $this->stageRepository->update($id, $name, $isActive, $sortOrder);
+            $actorUserId = $this->auth->getUserId();
+            $this->stageRepository->update($id, $name, $isActive, $sortOrder, $actorUserId);
+            $this->feedbackRepository->logAudit(
+                'hr',
+                'stage_updated',
+                $this->buildConfigReference('CFG-STG', $id),
+                json_encode(['stage_id' => $id, 'name' => $name, 'is_active' => $isActive, 'sort_order' => $sortOrder]),
+                $actorUserId
+            );
             Response::json(['data' => $this->stageRepository->findById($id)]);
         } catch (\Throwable $e) {
             $code = (int) ($e->getCode() ?: 400);
@@ -128,8 +152,8 @@ final class HrStageApiController
             $this->auth->authenticate();
             $this->auth->requireRole(Authorization::ROLE_HR);
 
-            $id = (int) ($params['id'] ?? 0);
-            if ($id <= 0) {
+            $id = trim((string) ($params['id'] ?? ''));
+            if ($id === '') {
                 Response::json(['error' => 'Invalid stage ID'], 400);
             }
 
@@ -137,7 +161,15 @@ final class HrStageApiController
                 Response::json(['error' => 'Stage not found'], 404);
             }
 
+            $actorUserId = $this->auth->getUserId();
             $this->stageRepository->delete($id);
+            $this->feedbackRepository->logAudit(
+                'hr',
+                'stage_deleted',
+                $this->buildConfigReference('CFG-STG', $id),
+                json_encode(['stage_id' => $id]),
+                $actorUserId
+            );
             Response::json(['message' => 'Stage deleted']);
         } catch (\RuntimeException $e) {
             $code = (int) ($e->getCode() ?: 400);

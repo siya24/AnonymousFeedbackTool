@@ -77,7 +77,7 @@ final class HrApiController
         // Generate JWT token
         $jwt = Container::get('jwt');
         $token = $jwt->encode([
-            'user_id' => (int)$user['id'],
+            'user_id' => $user['id'],
             'email' => $user['email'],
             'name' => $user['name'],
             'role' => $user['role']
@@ -126,7 +126,7 @@ final class HrApiController
     {
         try {
             $stmt = $this->db->prepare(
-                'INSERT INTO login_attempts (ip, success) VALUES (?, ?)'
+                'INSERT INTO login_attempts (id, ip, success) VALUES (UUID(), ?, ?)'
             );
             $stmt->execute([$ip, $success ? 1 : 0]);
         } catch (\Throwable $e) {
@@ -352,8 +352,13 @@ final class HrApiController
         $placeholderHash = password_hash(bin2hex(random_bytes(16)), PASSWORD_BCRYPT);
 
         $upsert = $this->db->prepare(
-            'INSERT INTO users (name, email, password_hash, role, is_active) VALUES (?, ?, ?, ?, 1)
-             ON DUPLICATE KEY UPDATE name = VALUES(name), role = VALUES(role), is_active = VALUES(is_active)'
+            'INSERT INTO users (id, name, email, password_hash, role, is_active, created_at, updated_at)
+             VALUES (UUID(), ?, ?, ?, ?, 1, NOW(), NOW())
+             ON DUPLICATE KEY UPDATE
+                 name = VALUES(name),
+                 role = VALUES(role),
+                 is_active = VALUES(is_active),
+                 updated_at = NOW()'
         );
         $upsert->execute([$name, $email, $placeholderHash, $role]);
 

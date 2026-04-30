@@ -15,6 +15,8 @@ class NotificationService
         private string $defaultHrEmail,
         private string $defaultEthicsEmail,
         private string $baseUrl = '',
+        private bool $immediateNotificationsEnabled = true,
+        private bool $scheduledNotificationsEnabled = true,
     ) {
         if (empty($this->baseUrl)) {
             $configured = getenv('APP_BASE_URL');
@@ -22,6 +24,36 @@ class NotificationService
                 ? $configured
                 : self::detectBaseUrl();
         }
+    }
+
+    private function isDisallowedRecipient(string $email): bool
+    {
+        $normalized = strtolower(trim($email));
+        if ($normalized === '' || !str_contains($normalized, '@')) {
+            return true;
+        }
+
+        $domain = substr(strrchr($normalized, '@') ?: '', 1);
+        $blockedDomains = ['organization.com', 'example.com', 'example.local'];
+        return in_array($domain, $blockedDomains, true);
+    }
+
+    /**
+     * @return string[]
+     */
+    private function resolveRecipientsByRole(string $role, string $fallbackEmail): array
+    {
+        $recipients = $this->repository->getRecipientsByRole($role);
+        $recipients = array_values(array_filter(
+            $recipients,
+            fn(string $email): bool => !$this->isDisallowedRecipient($email)
+        ));
+
+        if (empty($recipients) && !$this->isDisallowedRecipient($fallbackEmail)) {
+            $recipients = [$fallbackEmail];
+        }
+
+        return array_values(array_unique($recipients));
     }
 
     /**
@@ -62,11 +94,15 @@ class NotificationService
         return $scheme . '://' . $host;
     }
 
-    public function notifyNewFeedback(int $reportId, string $reference, string $category): void
+    public function notifyNewFeedback(string $feedbackId, string $reference, string $category): void
     {
-        $recipients = $this->repository->getRecipientsByRole('hr');
+        if (!$this->immediateNotificationsEnabled) {
+            return;
+        }
+
+        $recipients = $this->resolveRecipientsByRole('hr', $this->defaultHrEmail);
         if (empty($recipients)) {
-            $recipients = [$this->defaultHrEmail];
+            return;
         }
         $caseUrl = $this->baseUrl . '/hr/cases/' . urlencode($reference);
         $subject = "New anonymous feedback submitted ({$reference})";
@@ -85,15 +121,19 @@ class NotificationService
         $recipients = $this->applyDevOverride($recipients);
         foreach ($recipients as $recipient) {
             $this->mailer->sendHtml($recipient, $subject, $html, $plain);
-            $this->repository->logNotification($reportId, 'new_feedback', $recipient);
+            $this->repository->logNotification($feedbackId, 'new_feedback', $recipient);
         }
     }
 
-    public function notifyFollowUpSubmitted(int $reportId, string $reference, string $category): void
+    public function notifyFollowUpSubmitted(string $feedbackId, string $reference, string $category): void
     {
-        $recipients = $this->repository->getRecipientsByRole('hr');
+        if (!$this->immediateNotificationsEnabled) {
+            return;
+        }
+
+        $recipients = $this->resolveRecipientsByRole('hr', $this->defaultHrEmail);
         if (empty($recipients)) {
-            $recipients = [$this->defaultHrEmail];
+            return;
         }
         $caseUrl = $this->baseUrl . '/hr/cases/' . urlencode($reference);
         $subject = "Reporter follow-up received ({$reference})";
@@ -112,20 +152,24 @@ class NotificationService
         $recipients = $this->applyDevOverride($recipients);
         foreach ($recipients as $recipient) {
             $this->mailer->sendHtml($recipient, $subject, $html, $plain);
-            $this->repository->logNotification($reportId, 'followup_notif', $recipient);
+            $this->repository->logNotification($feedbackId, 'followup_notif', $recipient);
         }
     }
 
     public function processScheduledNotifications(): array
     {
+        if (!$this->scheduledNotificationsEnabled) {
+            return ['reminders_sent' => 0, 'escalations_sent' => 0];
+        }
+
         $reminders   = 0;
         $escalations = 0;
 
         $pendingReminders = $this->repository->getUnacknowledgedReportsNeedingNotification(48, 'reminder_48h');
         foreach ($pendingReminders as $report) {
-            $recipients = $this->repository->getRecipientsByRole('hr');
+            $recipients = $this->resolveRecipientsByRole('hr', $this->defaultHrEmail);
             if (empty($recipients)) {
-                $recipients = [$this->defaultHrEmail];
+                continue;
             }
             $caseUrl = $this->baseUrl . '/hr/cases/' . urlencode($report['reference_no']);
             $subject = "Reminder: feedback case not acknowledged ({$report['reference_no']})";
@@ -144,16 +188,16 @@ class NotificationService
             $recipients = $this->applyDevOverride($recipients);
             foreach ($recipients as $recipient) {
                 $this->mailer->sendHtml($recipient, $subject, $html, $plain);
-                $this->repository->logNotification((int) $report['id'], 'reminder_48h', $recipient);
+                $this->repository->logNotification((string) $report['id'], 'reminder_48h', $recipient);
                 $reminders++;
             }
         }
 
         $pendingEscalations = $this->repository->getUnacknowledgedReportsNeedingNotification(72, 'escalation_72h');
         foreach ($pendingEscalations as $report) {
-            $recipients = $this->repository->getRecipientsByRole('ethics');
+            $recipients = $this->resolveRecipientsByRole('ethics', $this->defaultEthicsEmail);
             if (empty($recipients)) {
-                $recipients = [$this->defaultEthicsEmail];
+                continue;
             }
             $caseUrl = $this->baseUrl . '/hr/cases/' . urlencode($report['reference_no']);
             $subject = "Escalation: feedback case not acknowledged ({$report['reference_no']})";
@@ -172,7 +216,7 @@ class NotificationService
             $recipients = $this->applyDevOverride($recipients);
             foreach ($recipients as $recipient) {
                 $this->mailer->sendHtml($recipient, $subject, $html, $plain);
-                $this->repository->logNotification((int) $report['id'], 'escalation_72h', $recipient);
+                $this->repository->logNotification((string) $report['id'], 'escalation_72h', $recipient);
                 $escalations++;
             }
         }

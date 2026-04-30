@@ -80,6 +80,29 @@ uploads/                ← Uploaded attachment files (not web-accessible direct
 
 ## 4. Request Lifecycle
 
+### Flowchart
+
+```mermaid
+flowchart TD
+  A[Browser Request] --> B[index.php front controller]
+  B --> C[Load bootstrap.php]
+  C --> C1[Autoloader + .env + security headers]
+  C --> C2[Load app and database config]
+  C --> C3[Initialize container services]
+  C3 --> C4[DB PDO + Migration::run]
+  C3 --> C5[JWT + Authorization + Repositories]
+  B --> D{APP_MODE allows route?}
+  D -- No --> E[Return 403 or route blocked]
+  D -- Yes --> F[Register routes]
+  F --> G[Router::dispatch method and path]
+  G --> H[Match route and extract params]
+  H --> I[Instantiate controller and call action]
+  I --> J{Controller type}
+  J -- API --> K[Response::json]
+  J -- Web --> L[Render PHP view template]
+  M[scripts/process_notifications.php scheduled task] -. separate from web request .-> N[processScheduledNotifications]
+```
+
 ```
 Browser Request
       │
@@ -97,6 +120,8 @@ index.php (front controller)
       │       ├── Container::set('auth') — Authorization
       │       └── Container::set('feedbackRepository', 'categoryRepository', etc.)
       │
+      │       NOTE: processScheduledNotifications() is NOT called here.
+      │       It runs only via scripts/process_notifications.php (cron/Task Scheduler).
       ├── Check APP_MODE — block /hr and /api/hr in public mode
       │
       ├── Register routes on Router instance
@@ -124,7 +149,7 @@ statuses ───────────────────────�
                                       │ FK status_id
 stages ──────────────────────────────┤
                                       │ FK stage_id
-                              reports (id, reference_no, category_id,
+                            feedbacks (id, reference_no, category_id,
                                         category_other, description,
                                         status_id, stage_id, priority,
                                         anonymized_summary, action_taken,
@@ -134,17 +159,17 @@ stages ────────────────────────�
               ┌───────────────────────┼────────────────────────────┐
               │                       │                            │
      report_updates             attachments                  notifications
-     (FK report_id CASCADE)     (FK report_id CASCADE,       (FK report_id CASCADE)
+     (FK feedback_id CASCADE)   (FK feedback_id CASCADE,     (FK feedback_id CASCADE)
                                   FK report_update_id CASCADE)
 
+                                login_attempts
+                                (rate-limiting — no FK)
+
                                 audit_logs
-                                (FK report_id SET NULL — preserves history on delete)
+                                (FK feedback_id SET NULL — preserves history on delete)
 
                                 users
                                 (HR/Ethics officer accounts)
-
-                                login_attempts
-                                (Rate-limiting for HR login)
 ```
 
 ### Table Definitions
@@ -181,7 +206,7 @@ Default stages seeded on install: Logged, Under Review, Awaiting Response, Escal
 | created_at | DATETIME | |
 | updated_at | DATETIME | |
 
-#### `reports`
+#### `feedbacks`
 | Column | Type | Notes |
 |---|---|---|
 | id | BIGINT UNSIGNED PK | Auto-increment |
@@ -208,7 +233,7 @@ Default stages seeded on install: Logged, Under Review, Awaiting Response, Escal
 | Column | Type | Notes |
 |---|---|---|
 | id | BIGINT UNSIGNED PK | |
-| report_id | BIGINT UNSIGNED NOT NULL | FK → reports(id) ON DELETE CASCADE |
+| feedback_id | BIGINT UNSIGNED NOT NULL | FK → feedbacks(id) ON DELETE CASCADE |
 | update_reference_no | VARCHAR(40) UNIQUE | Format: `UPD-YYYYMMDD-XXXXXX` |
 | update_text | TEXT NOT NULL | Employee follow-up content |
 | created_at | DATETIME NOT NULL | |
@@ -217,7 +242,7 @@ Default stages seeded on install: Logged, Under Review, Awaiting Response, Escal
 | Column | Type | Notes |
 |---|---|---|
 | id | BIGINT UNSIGNED PK | |
-| report_id | BIGINT UNSIGNED NULL | FK → reports(id) ON DELETE CASCADE |
+| feedback_id | BIGINT UNSIGNED NULL | FK → feedbacks(id) ON DELETE CASCADE |
 | report_update_id | BIGINT UNSIGNED NULL | FK → report_updates(id) ON DELETE CASCADE |
 | original_name | VARCHAR(255) | Original filename |
 | stored_name | VARCHAR(255) | Randomised filename on disk |
@@ -229,19 +254,23 @@ Default stages seeded on install: Logged, Under Review, Awaiting Response, Escal
 | Column | Type | Notes |
 |---|---|---|
 | id | BIGINT UNSIGNED PK | |
-| report_id | BIGINT UNSIGNED NULL | FK → reports(id) ON DELETE SET NULL |
+| feedback_id | BIGINT UNSIGNED NULL | FK → feedbacks(id) ON DELETE SET NULL |
+| actor_user_id | INT NULL | FK → users(id) ON DELETE SET NULL (nullable for anonymous actions) |
 | actor | VARCHAR(80) | `anonymous` or HR username |
 | action | VARCHAR(200) | Machine-readable action label |
 | reference_no | VARCHAR(40) | Retained even if report is deleted |
 | details | TEXT | Human-readable detail |
 | created_at | DATETIME NOT NULL | |
 
+Design note:
+- New FK naming uses `feedback_id` to align with the `feedbacks` table and avoid legacy ambiguity.
+
 #### `notifications`
 | Column | Type | Notes |
 |---|---|---|
 | id | BIGINT UNSIGNED PK | |
-| report_id | BIGINT UNSIGNED NOT NULL | FK → reports(id) ON DELETE CASCADE |
-| kind | VARCHAR(20) | `new_feedback`, `followup`, `reminder_24h`, etc. |
+| feedback_id | BIGINT UNSIGNED NOT NULL | FK → feedbacks(id) ON DELETE CASCADE |
+| kind | VARCHAR(20) | `new_feedback`, `followup_notif`, `reminder_48h`, `escalation_72h` |
 | recipient | VARCHAR(100) | Email address sent to |
 | sent_at | DATETIME NOT NULL | |
 
@@ -358,7 +387,7 @@ Every HR API controller calls `Authorization::authenticate()` which:
 Anonymity is enforced at the application layer:
 
 - No session, cookie, IP address, user agent, or browser fingerprint is stored against a submission
-- The `reports` table has no user identifier column
+- The `feedbacks` table has no user identifier column
 - The only link back to a submission is the reference number, which is randomly generated (`bin2hex(random_bytes(3))`) and only shown once to the submitter
 - `internal_notes` are never returned by any public API endpoint
 - File downloads via `/api/attachments/{id}` serve by ID only — no path traversal is possible as `stored_name` is used with `basename()`
@@ -370,7 +399,7 @@ Anonymity is enforced at the application layer:
 - Accepted MIME types are validated server-side (PDF, Word documents, images)
 - Files are stored in the `/uploads/` directory using a randomised `stored_name`
 - The `/uploads/` path is blocked at the front controller level (HTTP 403) — files can only be downloaded via `/api/attachments/{id}`
-- Attachment records are linked to either a `report_id` or a `report_update_id` (not both)
+- Attachment records are linked to either a `feedback_id` or a `report_update_id` (not both)
 
 ---
 
@@ -383,13 +412,18 @@ Anonymity is enforced at the application layer:
 | New feedback submitted | All active HR users (role = `hr`); falls back to `HR_NOTIFICATION_EMAIL` env var |
 | Employee follow-up submitted | All active HR users |
 
-### Scheduled Notifications (triggered by cron)
+### Scheduled Notifications (triggered by cron / Task Scheduler)
 
-The script `scripts/process_notifications.php` is designed to be run by a scheduled task (cron job). It identifies reports that:
+The script `scripts/process_notifications.php` must be run by an external scheduler (Linux cron or Windows Task Scheduler — recommended: every hour). It is **not** called on web requests. It identifies reports that:
 - Have not been acknowledged after a configurable number of hours
-- Have not already received a notification of that `kind`
+- Have not already received a notification of that `kind` (deduplication via `notifications` table)
 
-And sends reminder emails to the HR team.
+| Threshold | Kind | Recipients |
+|---|---|---|
+| 48 hours unacknowledged | `reminder_48h` | HR users (role = `hr`) |
+| 72 hours unacknowledged | `escalation_72h` | Ethics users (role = `ethics`) |
+
+**Dev override:** Set `DEV_NOTIFICATION_EMAIL` in `.env` to redirect all notification emails to a single address during development.
 
 ### Email Transport
 
@@ -450,6 +484,7 @@ All configuration is driven by environment variables loaded from a `.env` file. 
 | `MAIL_FROM_NAME` | Sender display name | `Voice Without Fear` |
 | `HR_NOTIFICATION_EMAIL` | Fallback HR notification recipient | _(empty)_ |
 | `ETHICS_NOTIFICATION_EMAIL` | Ethics officer notification recipient | _(empty)_ |
+| `DEV_NOTIFICATION_EMAIL` | **Dev only** — when set, all notifications are redirected to this address regardless of DB recipients | _(empty)_ |
 
 ---
 
@@ -462,7 +497,7 @@ The migration handles both:
 - **Legacy upgrades** — detects and migrates old schema versions:
   - `status` (text column) → `status_id` (FK to `statuses` table)
   - `category` (text column) → `category_id` (FK to `categories` table) + `category_other`
-  - `audit_logs.report_id` FK addition
+  - `audit_logs.feedback_id` FK addition
 
 ---
 

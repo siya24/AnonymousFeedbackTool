@@ -340,6 +340,7 @@ function initHrPage() {
     const loginForm = byId('hr-login-form');
     const hrCasesSection = byId('hr-cases-section');
     const loginNote = byId('hr-login-note');
+    const hrAuthLinks = byId('hr-auth-links');
     const filterForm = byId('hr-filter-form');
     const casesTable = byId('hr-cases-table');
     const paginationEl = byId('hr-cases-pagination');
@@ -370,6 +371,10 @@ function initHrPage() {
 
         if (hrCasesSection) {
             hrCasesSection.style.display = isLoggedIn ? 'block' : 'none';
+        }
+
+        if (hrAuthLinks) {
+            hrAuthLinks.classList.toggle('d-none', !isLoggedIn);
         }
     };
 
@@ -1032,11 +1037,13 @@ function initHrStages() {
 }
 
 function initNavAuth() {
+    const hrConsoleItem = byId('nav-hr-console-item');
     const loginItem = byId('nav-hr-login-item');
     const logoutItem = byId('nav-hr-logout-item');
     const logoutBtn = byId('nav-hr-logout');
 
     const update = (isLoggedIn) => {
+        if (hrConsoleItem) hrConsoleItem.style.display = isLoggedIn ? '' : 'none';
         if (loginItem) loginItem.style.display = isLoggedIn ? 'none' : '';
         if (logoutItem) logoutItem.style.display = isLoggedIn ? '' : 'none';
     };

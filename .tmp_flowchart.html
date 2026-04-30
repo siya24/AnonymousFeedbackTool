@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Request Lifecycle Flowchart</title>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+  </script>
+  <style>
+    body { margin: 0; padding: 24px; background: #ffffff; font-family: Calibri, Arial, sans-serif; }
+    .wrap { width: 1800px; }
+    .mermaid svg { max-width: 100%; height: auto; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h2>Request Lifecycle Flowchart</h2>
+    <div class="mermaid">
+flowchart TD
+    A[Browser Request] --> B[index.php front controller]
+    B --> C[Load bootstrap.php]
+    C --> C1[Autoloader + .env + security headers]
+    C --> C2[Load app and database config]
+    C --> C3[Initialize container services]
+    C3 --> C4[DB PDO + Migration::run]
+    C3 --> C5[JWT + Authorization + Repositories]
+    B --> D{APP_MODE allows route?}
+    D -- No --> E[Return 403 or route blocked]
+    D -- Yes --> F[Register routes]
+    F --> G[Router::dispatch method and path]
+    G --> H[Match route and extract params]
+    H --> I[Instantiate controller and call action]
+    I --> J{Controller type}
+    J -- API --> K[Response::json]
+    J -- Web --> L[Render PHP view template]
+    M[scripts/process_notifications.php scheduled task] -. separate from web request .-> N[processScheduledNotifications]
+    </div>
+  </div>
+</body>
+</html>

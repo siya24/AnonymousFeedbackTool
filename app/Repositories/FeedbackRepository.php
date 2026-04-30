@@ -7,60 +7,70 @@ use PDO;
 class FeedbackRepository {
     public function __construct(private PDO $pdo) {}
 
-    private function getDefaultStatusId(): int {
+    private static function generateUuid(): string
+    {
+        return sprintf('%08x-%04x-%04x-%04x-%012x',
+            random_int(0, 0xFFFFFFFF),
+            random_int(0, 0xFFFF),
+            random_int(0, 0x0FFF) | 0x4000,
+            random_int(0, 0x3FFF) | 0x8000,
+            random_int(0, 0xFFFFFFFFFFFF)
+        );
+    }
+
+    private function getDefaultStatusId(): string {
         $stmt = $this->pdo->query(
             'SELECT id FROM statuses WHERE is_active = 1 ORDER BY sort_order ASC, name ASC LIMIT 1'
         );
-        $statusId = (int) ($stmt->fetchColumn() ?: 0);
-        if ($statusId <= 0) {
+        $statusId = (string) ($stmt->fetchColumn() ?: '');
+        if ($statusId === '') {
             throw new \RuntimeException('No active statuses configured', 500);
         }
         return $statusId;
     }
 
-    private function getStatusIdByName(string $name): int {
+    private function getStatusIdByName(string $name): string {
         $stmt = $this->pdo->prepare('SELECT id FROM statuses WHERE name = ? LIMIT 1');
         $stmt->execute([$name]);
-        $statusId = (int) ($stmt->fetchColumn() ?: 0);
-        if ($statusId <= 0) {
+        $statusId = (string) ($stmt->fetchColumn() ?: '');
+        if ($statusId === '') {
             throw new \RuntimeException('Invalid status selected', 422);
         }
         return $statusId;
     }
 
-    private function getDefaultStageId(): int {
+    private function getDefaultStageId(): string {
         $stmt = $this->pdo->query(
             "SELECT id FROM stages WHERE name = 'Logged' AND is_active = 1 LIMIT 1"
         );
-        $stageId = (int) ($stmt->fetchColumn() ?: 0);
-        if ($stageId <= 0) {
-            // Fall back to any active stage if 'Logged' does not exist
+        $stageId = (string) ($stmt->fetchColumn() ?: '');
+        if ($stageId === '') {
             $stmt = $this->pdo->query(
                 'SELECT id FROM stages WHERE is_active = 1 ORDER BY sort_order ASC, name ASC LIMIT 1'
             );
-            $stageId = (int) ($stmt->fetchColumn() ?: 0);
+            $stageId = (string) ($stmt->fetchColumn() ?: '');
         }
-        if ($stageId <= 0) {
+        if ($stageId === '') {
             throw new \RuntimeException('No active stages configured', 500);
         }
         return $stageId;
     }
 
-    private function getStageIdByName(string $name): int {
+    private function getStageIdByName(string $name): string {
         $stmt = $this->pdo->prepare('SELECT id FROM stages WHERE name = ? LIMIT 1');
         $stmt->execute([$name]);
-        $stageId = (int) ($stmt->fetchColumn() ?: 0);
-        if ($stageId <= 0) {
+        $stageId = (string) ($stmt->fetchColumn() ?: '');
+        if ($stageId === '') {
             throw new \RuntimeException('Invalid stage selected', 422);
         }
         return $stageId;
     }
 
-    public function getCategoryIdByName(string $name): int {
+    public function getCategoryIdByName(string $name): string {
         $stmt = $this->pdo->prepare('SELECT id FROM categories WHERE name = ? AND is_active = 1 LIMIT 1');
         $stmt->execute([$name]);
-        $categoryId = (int) ($stmt->fetchColumn() ?: 0);
-        if ($categoryId <= 0) {
+        $categoryId = (string) ($stmt->fetchColumn() ?: '');
+        if ($categoryId === '') {
             throw new \RuntimeException('Invalid category selected', 422);
         }
         return $categoryId;
@@ -69,25 +79,28 @@ class FeedbackRepository {
     /**
      * Create a new feedback report
      */
-    public function createReport(string $reference, int $categoryId, ?string $categoryOther, string $description): int {
+    public function createReport(string $reference, string $categoryId, ?string $categoryOther, string $description): string {
         $defaultStatusId = $this->getDefaultStatusId();
         $defaultStageId  = $this->getDefaultStageId();
+        $id = self::generateUuid();
+
         $stmt = $this->pdo->prepare(
-            'INSERT INTO feedbacks (reference_no, category_id, category_other, description, status_id, stage_id, priority, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())'
+            'INSERT INTO feedbacks (id, reference_no, category_id, category_other, description, status_id, stage_id, priority, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())'
         );
-        
+
         $stmt->execute([
+            $id,
             $reference,
             $categoryId,
             $categoryOther,
             $description,
             $defaultStatusId,
             $defaultStageId,
-            'Normal'
+            'Normal',
         ]);
 
-        return (int) $this->pdo->lastInsertId();
+        return $id;
     }
 
     /**
@@ -114,16 +127,16 @@ class FeedbackRepository {
      */
     public function getDetailedReport(string $reference): ?array {
         $report = $this->findByReference($reference);
-        
+
         if (!$report) {
             return null;
         }
 
         return [
-            'report' => $report,
-            'updates' => $this->getReportUpdates((int)$report['id']),
-            'attachments' => $this->getReportAttachments((int)$report['id']),
-            'audit' => $this->getReportAudit($reference)
+            'report'      => $report,
+            'updates'     => $this->getReportUpdates((string) $report['id']),
+            'attachments' => $this->getReportAttachments((string) $report['id']),
+            'audit'       => $this->getReportAudit($reference),
         ];
     }
 
@@ -174,18 +187,17 @@ class FeedbackRepository {
         $sortOrder = strtoupper((string) ($filters['sort_order'] ?? 'DESC')) === 'ASC' ? 'ASC' : 'DESC';
 
         $sortColumnMap = [
-            'created_at' => 'r.created_at',
-            'category'   => 'c.name',
-            'status'     => 's.name',
-            'stage'      => 'st.name',
+            'created_at'   => 'r.created_at',
+            'category'     => 'c.name',
+            'status'       => 's.name',
+            'stage'        => 'st.name',
             'reference_no' => 'r.reference_no',
-            'priority'   => 'r.priority',
+            'priority'     => 'r.priority',
         ];
         $query .= ' ORDER BY ' . ($sortColumnMap[$sortBy] ?? 'r.created_at') . ' ' . $sortOrder;
 
         $stmt = $this->pdo->prepare($query);
         $stmt->execute($params);
-
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -204,9 +216,9 @@ class FeedbackRepository {
     }
 
     public function listCasesPaged(array $filters = [], int $page = 1, int $perPage = 10): array {
-        $page = max(1, $page);
+        $page    = max(1, $page);
         $perPage = max(1, min(100, $perPage));
-        $offset = ($page - 1) * $perPage;
+        $offset  = ($page - 1) * $perPage;
 
         $params = [];
         $query = 'SELECT r.*, s.name AS status,
@@ -225,12 +237,12 @@ class FeedbackRepository {
         $sortOrder = strtoupper((string) ($filters['sort_order'] ?? 'DESC')) === 'ASC' ? 'ASC' : 'DESC';
 
         $sortColumnMap = [
-            'created_at' => 'r.created_at',
-            'category'   => 'c.name',
-            'status'     => 's.name',
-            'stage'      => 'st.name',
+            'created_at'   => 'r.created_at',
+            'category'     => 'c.name',
+            'status'       => 's.name',
+            'stage'        => 'st.name',
             'reference_no' => 'r.reference_no',
-            'priority'   => 'r.priority',
+            'priority'     => 'r.priority',
         ];
         $query .= ' ORDER BY ' . ($sortColumnMap[$sortBy] ?? 'r.created_at') . ' ' . $sortOrder;
         $query .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) $offset;
@@ -256,17 +268,14 @@ class FeedbackRepository {
             $query .= ' AND r.reference_no LIKE ?';
             $params[] = '%' . $filters['reference_no'] . '%';
         }
-
         if (!empty($filters['category'])) {
             $query .= ' AND c.name = ?';
             $params[] = $filters['category'];
         }
-
         if (!empty($filters['status'])) {
             $query .= ' AND s.name = ?';
             $params[] = $filters['status'];
         }
-
         if (!empty($filters['date'])) {
             $query .= ' AND DATE(r.created_at) = ?';
             $params[] = $filters['date'];
@@ -276,31 +285,30 @@ class FeedbackRepository {
 
         $stmt = $this->pdo->prepare($query);
         $stmt->execute($params);
-
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**
      * Update report status and metadata
      */
-    public function updateReport(string $reference, array $data): bool {
-        $allowed = ['priority', 'stage', 'status', 'anonymized_summary', 'action_taken', 
-                   'outcome_comments', 'internal_notes', 'acknowledged_at'];
-        
+    public function updateReport(string $reference, array $data, ?string $updatedByUserId = null): bool {
+        $allowed = ['priority', 'stage', 'status', 'anonymized_summary', 'action_taken',
+                    'outcome_comments', 'internal_notes', 'acknowledged_at'];
+
         $updates = [];
-        $params = [];
+        $params  = [];
 
         foreach ($data as $key => $value) {
             if (in_array($key, $allowed)) {
                 if ($key === 'status') {
                     $updates[] = 'status_id = ?';
-                    $params[] = $this->getStatusIdByName((string) $value);
+                    $params[]  = $this->getStatusIdByName((string) $value);
                 } elseif ($key === 'stage') {
                     $updates[] = 'stage_id = ?';
-                    $params[] = $this->getStageIdByName((string) $value);
+                    $params[]  = $this->getStageIdByName((string) $value);
                 } else {
                     $updates[] = "$key = ?";
-                    $params[] = $value;
+                    $params[]  = $value;
                 }
             }
         }
@@ -309,9 +317,11 @@ class FeedbackRepository {
             return false;
         }
 
+        $updates[] = 'updated_by_user_id = ?';
+        $params[] = $updatedByUserId;
+
         $params[] = $reference;
-        $query = 'UPDATE feedbacks SET ' . implode(', ', $updates) . ', updated_at = NOW() 
-                  WHERE reference_no = ?';
+        $query = 'UPDATE feedbacks SET ' . implode(', ', $updates) . ', updated_at = NOW() WHERE reference_no = ?';
 
         $stmt = $this->pdo->prepare($query);
         return $stmt->execute($params);
@@ -320,52 +330,56 @@ class FeedbackRepository {
     /**
      * Create follow-up update
      */
-    public function createUpdate(int $reportId, string $updateReference, string $updateText): int {
+    public function createUpdate(string $feedbackId, string $updateReference, string $updateText): string {
+        $id = self::generateUuid();
+
         $stmt = $this->pdo->prepare(
-            'INSERT INTO report_updates (report_id, update_reference_no, update_text, created_at)
-             VALUES (?, ?, ?, NOW())'
+            'INSERT INTO report_updates (id, feedback_id, update_reference_no, update_text, created_at)
+             VALUES (?, ?, ?, ?, NOW())'
         );
-        
-        $stmt->execute([$reportId, $updateReference, $updateText]);
-        return (int) $this->pdo->lastInsertId();
+
+        $stmt->execute([$id, $feedbackId, $updateReference, $updateText]);
+        return $id;
     }
 
     /**
      * Get all updates for a report
      */
-    public function getReportUpdates(int $reportId): array {
-        $stmt = $this->pdo->prepare('SELECT * FROM report_updates WHERE report_id = ? ORDER BY created_at ASC');
-        $stmt->execute([$reportId]);
+    public function getReportUpdates(string $feedbackId): array {
+        $stmt = $this->pdo->prepare('SELECT * FROM report_updates WHERE feedback_id = ? ORDER BY created_at ASC');
+        $stmt->execute([$feedbackId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**
      * Save attachment
      */
-    public function saveAttachment(int $reportId, ?int $updateId, string $originalName, 
-                                  string $storedName, string $mimeType, int $size): int {
+    public function saveAttachment(string $feedbackId, ?string $updateId, string $originalName,
+                                   string $storedName, string $mimeType, int $size): string {
+        $id = self::generateUuid();
+
         $stmt = $this->pdo->prepare(
-            'INSERT INTO attachments (report_id, report_update_id, original_name, stored_name, mime_type, size_bytes, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, NOW())'
+            'INSERT INTO attachments (id, feedback_id, report_update_id, original_name, stored_name, mime_type, size_bytes, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, NOW())'
         );
-        
-        $stmt->execute([$reportId, $updateId, $originalName, $storedName, $mimeType, $size]);
-        return (int) $this->pdo->lastInsertId();
+
+        $stmt->execute([$id, $feedbackId, $updateId, $originalName, $storedName, $mimeType, $size]);
+        return $id;
     }
 
     /**
      * Get attachments for report
      */
-    public function getReportAttachments(int $reportId): array {
-        $stmt = $this->pdo->prepare('SELECT * FROM attachments WHERE report_id = ? ORDER BY created_at DESC');
-        $stmt->execute([$reportId]);
+    public function getReportAttachments(string $feedbackId): array {
+        $stmt = $this->pdo->prepare('SELECT * FROM attachments WHERE feedback_id = ? ORDER BY created_at DESC');
+        $stmt->execute([$feedbackId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**
      * Get a single attachment by ID
      */
-    public function getAttachmentById(int $id): ?array {
+    public function getAttachmentById(string $id): ?array {
         $stmt = $this->pdo->prepare('SELECT * FROM attachments WHERE id = ?');
         $stmt->execute([$id]);
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -375,24 +389,24 @@ class FeedbackRepository {
     /**
      * Log audit trail entry
      */
-    public function logAudit(string $actor, string $action, string $reference, string $details): int {
-        // Resolve report_id from reference_no for the FK; stays NULL if not found (e.g. pre-creation events)
-        $reportIdStmt = $this->pdo->prepare('SELECT id FROM feedbacks WHERE reference_no = ? LIMIT 1');
-        $reportIdStmt->execute([$reference]);
-        $reportId = ($reportIdStmt->fetchColumn() ?: null);
+    public function logAudit(string $actor, string $action, string $reference, string $details, ?string $actorUserId = null): string {
+        $feedbackIdStmt = $this->pdo->prepare('SELECT id FROM feedbacks WHERE reference_no = ? LIMIT 1');
+        $feedbackIdStmt->execute([$reference]);
+        $feedbackId = ($feedbackIdStmt->fetchColumn() ?: null);
+
+        $id = self::generateUuid();
 
         $stmt = $this->pdo->prepare(
-            'INSERT INTO audit_logs (report_id, actor, action, reference_no, details, created_at)
-             VALUES (?, ?, ?, ?, ?, NOW())'
+            'INSERT INTO audit_logs (id, feedback_id, actor, actor_user_id, action, reference_no, details, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, NOW())'
         );
 
-        $stmt->execute([$reportId, $actor, $action, $reference, $details]);
-        return (int) $this->pdo->lastInsertId();
+        $stmt->execute([$id, $feedbackId, $actor, $actorUserId, $action, $reference, $details]);
+        return $id;
     }
 
     /**
      * Delete audit log entries older than $retentionDays (default 1825 = 5 years).
-     * Returns the number of rows deleted.
      */
     public function pruneOldAuditLogs(int $retentionDays = 1825): int {
         $stmt = $this->pdo->prepare(
@@ -414,14 +428,16 @@ class FeedbackRepository {
     /**
      * Log notification
      */
-    public function logNotification(int $reportId, string $kind, string $recipient): int {
+    public function logNotification(string $feedbackId, string $kind, string $recipient): string {
+        $id = self::generateUuid();
+
         $stmt = $this->pdo->prepare(
-            'INSERT INTO notifications (report_id, kind, recipient, sent_at)
-             VALUES (?, ?, ?, NOW())'
+            'INSERT INTO notifications (id, feedback_id, kind, recipient, sent_at)
+             VALUES (?, ?, ?, ?, NOW())'
         );
-        
-        $stmt->execute([$reportId, $kind, $recipient]);
-        return (int) $this->pdo->lastInsertId();
+
+        $stmt->execute([$id, $feedbackId, $kind, $recipient]);
+        return $id;
     }
 
     /**
@@ -447,9 +463,8 @@ class FeedbackRepository {
              WHERE r.acknowledged_at IS NULL
                AND TIMESTAMPDIFF(HOUR, r.created_at, NOW()) >= ?
                AND NOT EXISTS (
-                   SELECT 1
-                   FROM notifications n
-                   WHERE n.report_id = r.id AND n.kind = ?
+                   SELECT 1 FROM notifications n
+                   WHERE n.feedback_id = r.id AND n.kind = ?
                )'
         );
 
@@ -471,7 +486,6 @@ class FeedbackRepository {
              GROUP BY YEAR(r.created_at), QUARTER(r.created_at), c.name
              ORDER BY year_no DESC, quarter_no DESC, c.name ASC'
         );
-
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -486,13 +500,11 @@ class FeedbackRepository {
              GROUP BY s.name
              ORDER BY total DESC'
         );
-
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**
      * Category frequency summary: total cases and still-open cases per category.
-     * Used to support prioritisation by frequency and potential impact (FRD §4.2).
      */
     public function getCategoryFrequencySummary(): array {
         $stmt = $this->pdo->query(
@@ -505,7 +517,6 @@ class FeedbackRepository {
              GROUP BY c.name
              ORDER BY open_cases DESC, total_cases DESC'
         );
-
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }

@@ -28,4 +28,6 @@ return [
     'smtp_password' => getenv('SMTP_PASSWORD') ?: '',
     'hr_notification_email' => getenv('HR_NOTIFICATION_EMAIL') ?: '',
     'ethics_notification_email' => getenv('ETHICS_NOTIFICATION_EMAIL') ?: '',
+    'notifications_immediate_enabled' => filter_var(getenv('NOTIFICATIONS_IMMEDIATE_ENABLED') ?: 'true', FILTER_VALIDATE_BOOLEAN),
+    'notifications_scheduled_enabled' => filter_var(getenv('NOTIFICATIONS_SCHEDULED_ENABLED') ?: 'true', FILTER_VALIDATE_BOOLEAN),
 ];

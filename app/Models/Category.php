@@ -6,7 +6,7 @@ namespace App\Models;
 final class Category
 {
     public function __construct(
-        public int $id,
+        public string $id,
         public string $name,
         public bool $isActive,
         public int $sortOrder,
@@ -18,7 +18,7 @@ final class Category
     public static function fromRow(array $row): self
     {
         return new self(
-            (int) ($row['id'] ?? 0),
+            (string) ($row['id'] ?? ''),
             (string) ($row['name'] ?? ''),
             ((int) ($row['is_active'] ?? 0)) === 1,
             (int) ($row['sort_order'] ?? 0),

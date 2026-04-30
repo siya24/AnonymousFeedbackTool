@@ -97,15 +97,13 @@ App\Core\Container::set('notificationService', new App\Services\NotificationServ
     $config['app']['hr_notification_email'] ?? '',
     $config['app']['ethics_notification_email'] ?? '',
     $config['app']['base_url'] ?? 'http://localhost:8000',
+    (bool) ($config['app']['notifications_immediate_enabled'] ?? true),
+    (bool) ($config['app']['notifications_scheduled_enabled'] ?? true),
 ));
 App\Core\Container::set('feedbackService', new App\Services\FeedbackService(
     App\Core\Container::get('feedbackRepository'),
     App\Core\Container::get('notificationService')
 ));
 
-// Process due notification reminders/escalations; duplicates are prevented in SQL.
-try {
-    App\Core\Container::get('feedbackService')->processScheduledNotifications();
-} catch (\Throwable $e) {
-    // Non-blocking by design: app functionality should continue even if mail transport fails.
-}
+// NOTE: Scheduled notifications (reminders/escalations) are sent via scripts/process_notifications.php
+// which should be run by a cron job or Windows Task Scheduler. Do NOT call it here on every request.

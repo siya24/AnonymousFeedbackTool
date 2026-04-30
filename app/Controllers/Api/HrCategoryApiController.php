@@ -8,16 +8,24 @@ use App\Core\Container;
 use App\Core\Request;
 use App\Core\Response;
 use App\Repositories\CategoryRepository;
+use App\Repositories\FeedbackRepository;
 
 final class HrCategoryApiController
 {
     private Authorization $auth;
     private CategoryRepository $categoryRepository;
+    private FeedbackRepository $feedbackRepository;
 
     public function __construct()
     {
         $this->auth = Container::get('auth');
         $this->categoryRepository = Container::get('categoryRepository');
+        $this->feedbackRepository = Container::get('feedbackRepository');
+    }
+
+    private function buildConfigReference(string $prefix, string $entityId): string
+    {
+        return $prefix . '-' . strtoupper(substr($entityId, 0, 8));
     }
 
     public function listAll(array $params = []): void
@@ -38,13 +46,13 @@ final class HrCategoryApiController
             $this->auth->authenticate();
             $this->auth->requireRole(Authorization::ROLE_HR);
 
-            $id = (int) ($params['id'] ?? 0);
-            if ($id <= 0) {
+            $id = trim((string) ($params['id'] ?? ''));
+            if ($id === '') {
                 Response::json(['error' => 'Invalid category ID'], 400);
             }
 
             $category = $this->categoryRepository->findById($id);
-            if (!$category) {
+            if (!$category || (int) ($category['is_active'] ?? 0) !== 1) {
                 Response::json(['error' => 'Category not found'], 404);
             }
 
@@ -72,7 +80,15 @@ final class HrCategoryApiController
                 Response::json(['error' => 'Category name must be 120 characters or less'], 422);
             }
 
-            $id = $this->categoryRepository->create($name, $sortOrder);
+            $actorUserId = $this->auth->getUserId();
+            $id = $this->categoryRepository->create($name, $sortOrder, $actorUserId);
+            $this->feedbackRepository->logAudit(
+                'hr',
+                'category_created',
+                $this->buildConfigReference('CFG-CAT', $id),
+                json_encode(['category_id' => $id, 'name' => $name, 'sort_order' => $sortOrder]),
+                $actorUserId
+            );
             Response::json(['data' => $this->categoryRepository->findById($id)], 201);
         } catch (\Throwable $e) {
             $code = (int) ($e->getCode() ?: 400);
@@ -90,13 +106,13 @@ final class HrCategoryApiController
             $this->auth->authenticate();
             $this->auth->requireRole(Authorization::ROLE_HR);
 
-            $id = (int) ($params['id'] ?? 0);
+            $id = trim((string) ($params['id'] ?? ''));
             $input = Request::input();
             $name = trim((string) ($input['name'] ?? ''));
             $isActive = (bool) ($input['is_active'] ?? true);
             $sortOrder = (int) ($input['sort_order'] ?? 0);
 
-            if ($id <= 0) {
+            if ($id === '') {
                 Response::json(['error' => 'Invalid category ID'], 400);
             }
             if ($name === '') {
@@ -110,7 +126,15 @@ final class HrCategoryApiController
                 Response::json(['error' => 'Category not found'], 404);
             }
 
-            $this->categoryRepository->update($id, $name, $isActive, $sortOrder);
+            $actorUserId = $this->auth->getUserId();
+            $this->categoryRepository->update($id, $name, $isActive, $sortOrder, $actorUserId);
+            $this->feedbackRepository->logAudit(
+                'hr',
+                'category_updated',
+                $this->buildConfigReference('CFG-CAT', $id),
+                json_encode(['category_id' => $id, 'name' => $name, 'is_active' => $isActive, 'sort_order' => $sortOrder]),
+                $actorUserId
+            );
             Response::json(['data' => $this->categoryRepository->findById($id)]);
         } catch (\Throwable $e) {
             $code = (int) ($e->getCode() ?: 400);
@@ -128,8 +152,8 @@ final class HrCategoryApiController
             $this->auth->authenticate();
             $this->auth->requireRole(Authorization::ROLE_HR);
 
-            $id = (int) ($params['id'] ?? 0);
-            if ($id <= 0) {
+            $id = trim((string) ($params['id'] ?? ''));
+            if ($id === '') {
                 Response::json(['error' => 'Invalid category ID'], 400);
             }
 
@@ -137,7 +161,15 @@ final class HrCategoryApiController
                 Response::json(['error' => 'Category not found'], 404);
             }
 
+            $actorUserId = $this->auth->getUserId();
             $this->categoryRepository->delete($id);
+            $this->feedbackRepository->logAudit(
+                'hr',
+                'category_deleted',
+                $this->buildConfigReference('CFG-CAT', $id),
+                json_encode(['category_id' => $id]),
+                $actorUserId
+            );
             Response::json(['message' => 'Category deleted']);
         } catch (\RuntimeException $e) {
             $code = (int) ($e->getCode() ?: 400);
