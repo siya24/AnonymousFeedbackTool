@@ -14,13 +14,13 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- Insert default HR user (password: admin@123456)
 INSERT IGNORE INTO users (name, email, password_hash, role) VALUES
-('System HR', 'hr@organization.com', '$2y$12$Wd47evruG1zT4kQ7HjNH8ey9j24mdzluryRZwqWcennxueynQBFVW', 'hr'),
-('Ethics Officer', 'ethics@organization.com', '$2y$12$Wd47evruG1zT4kQ7HjNH8ey9j24mdzluryRZwqWcennxueynQBFVW', 'ethics');
+('System HR', 'siyabulelag@legal-aid.co.za', '$2y$12$Wd47evruG1zT4kQ7HjNH8ey9j24mdzluryRZwqWcennxueynQBFVW', 'hr'),
+('Ethics Officer', 'siyabulelag@legal-aid.co.za', '$2y$12$Wd47evruG1zT4kQ7HjNH8ey9j24mdzluryRZwqWcennxueynQBFVW', 'ethics');
 
 -- One-time correction for previously seeded invalid hash; does not overwrite custom passwords.
 UPDATE users
 SET password_hash = '$2y$12$Wd47evruG1zT4kQ7HjNH8ey9j24mdzluryRZwqWcennxueynQBFVW'
-WHERE email IN ('hr@organization.com', 'ethics@organization.com')
+WHERE email IN ('siyabulelag@legal-aid.co.za', 'siyabulelag@legal-aid.co.za')
     AND password_hash = '$2y$10$rOLJlN/Eg0Y/PjWLBrC.oOvfF.Ov3Nm6u9KxfHvCbGF/LF4tGvkm2';
 
 -- Seed default categories (INSERT IGNORE skips if already exists)

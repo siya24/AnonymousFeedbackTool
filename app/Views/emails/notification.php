@@ -1,5 +1,18 @@
 <?php declare(strict_types=1); ?>
 <?php
+/**
+ * Email notification template.
+ *
+ * @var string $badge
+ * @var string $badgeColor
+ * @var string $title
+ * @var string $message
+ * @var string $reference
+ * @var string $category
+ * @var string $caseUrl
+ * @var string $ctaLabel
+ * @var string $submittedAt
+ */
 $esc = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
 $submittedRow = ($submittedAt ?? '') !== ''
     ? '<tr><td style="padding:6px 0;color:#666;font-size:13px;">Submitted</td><td style="padding:6px 0;font-size:13px;">' . $esc((string) $submittedAt) . '</td></tr>'

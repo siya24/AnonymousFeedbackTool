@@ -24,6 +24,21 @@ class NotificationService
         }
     }
 
+    /**
+     * When DEV_NOTIFICATION_EMAIL is set, redirect all recipients to that address.
+     *
+     * @param  string[] $recipients
+     * @return string[]
+     */
+    private function applyDevOverride(array $recipients): array
+    {
+        $override = getenv('DEV_NOTIFICATION_EMAIL');
+        if ($override !== false && $override !== '') {
+            return [$override];
+        }
+        return $recipients;
+    }
+
     private static function detectBaseUrl(): string
     {
         // In CLI context (cron jobs) there is no HTTP request — APP_BASE_URL must be set.
@@ -67,6 +82,7 @@ class NotificationService
             'ctaLabel' => 'View Case in HR Console',
             'submittedAt' => '',
         ]);
+        $recipients = $this->applyDevOverride($recipients);
         foreach ($recipients as $recipient) {
             $this->mailer->sendHtml($recipient, $subject, $html, $plain);
             $this->repository->logNotification($reportId, 'new_feedback', $recipient);
@@ -93,9 +109,10 @@ class NotificationService
             'ctaLabel'    => 'View Case Update',
             'submittedAt' => '',
         ]);
+        $recipients = $this->applyDevOverride($recipients);
         foreach ($recipients as $recipient) {
             $this->mailer->sendHtml($recipient, $subject, $html, $plain);
-            $this->repository->logNotification($reportId, 'followup_notification', $recipient);
+            $this->repository->logNotification($reportId, 'followup_notif', $recipient);
         }
     }
 
@@ -124,6 +141,7 @@ class NotificationService
                 'ctaLabel' => 'Acknowledge Case',
                 'submittedAt' => (string) $report['created_at'],
             ]);
+            $recipients = $this->applyDevOverride($recipients);
             foreach ($recipients as $recipient) {
                 $this->mailer->sendHtml($recipient, $subject, $html, $plain);
                 $this->repository->logNotification((int) $report['id'], 'reminder_48h', $recipient);
@@ -151,6 +169,7 @@ class NotificationService
                 'ctaLabel' => 'Review Escalated Case',
                 'submittedAt' => (string) $report['created_at'],
             ]);
+            $recipients = $this->applyDevOverride($recipients);
             foreach ($recipients as $recipient) {
                 $this->mailer->sendHtml($recipient, $subject, $html, $plain);
                 $this->repository->logNotification((int) $report['id'], 'escalation_72h', $recipient);
