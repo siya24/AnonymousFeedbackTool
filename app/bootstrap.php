@@ -53,7 +53,7 @@ if (file_exists($envPath)) {
     }
 }
 
-// Security headers — set on every response before any output
+
 header('X-Frame-Options: DENY');
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: strict-origin-when-cross-origin');
@@ -67,12 +67,12 @@ App\Core\Container::set('config', $config);
 App\Core\Container::set('db', App\Core\Database::connect($config['database']));
 App\Core\Migration::run(App\Core\Container::get('db'));
 
-// Initialize JWT and Authorization services
+
 $jwtSecret = $_ENV['JWT_SECRET'] ?? 'your-super-secret-jwt-key-change-in-production';
 App\Core\Container::set('jwt', new App\Core\JwtService($jwtSecret));
 App\Core\Container::set('auth', new App\Core\Authorization(App\Core\Container::get('jwt')));
 
-// Initialize Repository and Service layers
+
 $db = App\Core\Container::get('db');
 App\Core\Container::set('feedbackRepository', new App\Repositories\FeedbackRepository($db));
 App\Core\Container::set('categoryRepository', new App\Repositories\CategoryRepository($db));
@@ -105,5 +105,5 @@ App\Core\Container::set('feedbackService', new App\Services\FeedbackService(
     App\Core\Container::get('notificationService')
 ));
 
-// NOTE: Scheduled notifications (reminders/escalations) are sent via scripts/process_notifications.php
-// which should be run by a cron job or Windows Task Scheduler. Do NOT call it here on every request.
+
+

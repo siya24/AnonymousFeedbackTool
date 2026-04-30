@@ -16,17 +16,13 @@ final class CategoryApiController
         $this->categoryRepository = Container::get('categoryRepository');
     }
 
-    /**
-     * GET /api/categories
-     */
+    
     public function listActive(array $params = []): void
     {
         Response::json(['data' => $this->categoryRepository->getActive()]);
     }
 
-    /**
-     * GET /api/categories/{id}
-     */
+    
     public function getById(array $params): void
     {
         $id = trim((string) ($params['id'] ?? ''));

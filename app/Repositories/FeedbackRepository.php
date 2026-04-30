@@ -76,9 +76,7 @@ class FeedbackRepository {
         return $categoryId;
     }
 
-    /**
-     * Create a new feedback report
-     */
+    
     public function createReport(string $reference, string $categoryId, ?string $categoryOther, string $description): string {
         $defaultStatusId = $this->getDefaultStatusId();
         $defaultStageId  = $this->getDefaultStageId();
@@ -103,9 +101,7 @@ class FeedbackRepository {
         return $id;
     }
 
-    /**
-     * Find report by reference number
-     */
+    
     public function findByReference(string $reference): ?array {
         $stmt = $this->pdo->prepare(
             'SELECT r.*, s.name AS status,
@@ -122,9 +118,7 @@ class FeedbackRepository {
         return $result ?: null;
     }
 
-    /**
-     * Get report with all related data
-     */
+    
     public function getDetailedReport(string $reference): ?array {
         $report = $this->findByReference($reference);
 
@@ -166,9 +160,7 @@ class FeedbackRepository {
         return $where;
     }
 
-    /**
-     * List all reports for HR with filters
-     */
+    
     public function listCases(array $filters = []): array {
         $params = [];
         $query = 'SELECT r.*, s.name AS status,
@@ -252,9 +244,7 @@ class FeedbackRepository {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * List public anonymized reports
-     */
+    
     public function listPublicReports(array $filters = []): array {
         $query = 'SELECT r.reference_no, COALESCE(r.category_other, c.name) AS category,
                          s.name AS status, r.anonymized_summary, r.outcome_comments, r.created_at
@@ -288,9 +278,7 @@ class FeedbackRepository {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Update report status and metadata
-     */
+    
     public function updateReport(string $reference, array $data, ?string $updatedByUserId = null): bool {
         $allowed = ['priority', 'stage', 'status', 'anonymized_summary', 'action_taken',
                     'outcome_comments', 'internal_notes', 'acknowledged_at'];
@@ -327,9 +315,7 @@ class FeedbackRepository {
         return $stmt->execute($params);
     }
 
-    /**
-     * Create follow-up update
-     */
+    
     public function createUpdate(string $feedbackId, string $updateReference, string $updateText): string {
         $id = self::generateUuid();
 
@@ -342,18 +328,14 @@ class FeedbackRepository {
         return $id;
     }
 
-    /**
-     * Get all updates for a report
-     */
+    
     public function getReportUpdates(string $feedbackId): array {
         $stmt = $this->pdo->prepare('SELECT * FROM report_updates WHERE feedback_id = ? ORDER BY created_at ASC');
         $stmt->execute([$feedbackId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Save attachment
-     */
+    
     public function saveAttachment(string $feedbackId, ?string $updateId, string $originalName,
                                    string $storedName, string $mimeType, int $size): string {
         $id = self::generateUuid();
@@ -367,18 +349,14 @@ class FeedbackRepository {
         return $id;
     }
 
-    /**
-     * Get attachments for report
-     */
+    
     public function getReportAttachments(string $feedbackId): array {
         $stmt = $this->pdo->prepare('SELECT * FROM attachments WHERE feedback_id = ? ORDER BY created_at DESC');
         $stmt->execute([$feedbackId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Get a single attachment by ID
-     */
+    
     public function getAttachmentById(string $id): ?array {
         $stmt = $this->pdo->prepare('SELECT * FROM attachments WHERE id = ?');
         $stmt->execute([$id]);
@@ -386,9 +364,7 @@ class FeedbackRepository {
         return $result ?: null;
     }
 
-    /**
-     * Log audit trail entry
-     */
+    
     public function logAudit(string $actor, string $action, string $reference, string $details, ?string $actorUserId = null): string {
         $feedbackIdStmt = $this->pdo->prepare('SELECT id FROM feedbacks WHERE reference_no = ? LIMIT 1');
         $feedbackIdStmt->execute([$reference]);
@@ -405,9 +381,7 @@ class FeedbackRepository {
         return $id;
     }
 
-    /**
-     * Delete audit log entries older than $retentionDays (default 1825 = 5 years).
-     */
+    
     public function pruneOldAuditLogs(int $retentionDays = 1825): int {
         $stmt = $this->pdo->prepare(
             'DELETE FROM audit_logs WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)'
@@ -416,18 +390,14 @@ class FeedbackRepository {
         return (int) $stmt->rowCount();
     }
 
-    /**
-     * Get audit trail for reference
-     */
+    
     public function getReportAudit(string $reference): array {
         $stmt = $this->pdo->prepare('SELECT * FROM audit_logs WHERE reference_no = ? ORDER BY created_at DESC');
         $stmt->execute([$reference]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Log notification
-     */
+    
     public function logNotification(string $feedbackId, string $kind, string $recipient): string {
         $id = self::generateUuid();
 
@@ -440,9 +410,7 @@ class FeedbackRepository {
         return $id;
     }
 
-    /**
-     * Get active recipient emails by role.
-     */
+    
     public function getRecipientsByRole(string $role): array {
         $stmt = $this->pdo->prepare('SELECT email FROM users WHERE role = ? AND is_active = 1');
         $stmt->execute([$role]);
@@ -452,9 +420,7 @@ class FeedbackRepository {
         );
     }
 
-    /**
-     * Find unacknowledged reports that need a specific notification kind.
-     */
+    
     public function getUnacknowledgedReportsNeedingNotification(int $hours, string $kind): array {
         $stmt = $this->pdo->prepare(
             'SELECT r.id, r.reference_no, COALESCE(r.category_other, c.name) AS category, r.created_at
@@ -472,9 +438,7 @@ class FeedbackRepository {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Dashboard trends grouped by year and quarter.
-     */
+    
     public function getQuarterlyCategoryTrends(): array {
         $stmt = $this->pdo->query(
             'SELECT YEAR(r.created_at) AS year_no,
@@ -489,9 +453,7 @@ class FeedbackRepository {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Dashboard aggregate status totals.
-     */
+    
     public function getStatusTotals(): array {
         $stmt = $this->pdo->query(
             'SELECT s.name AS status, COUNT(*) AS total
@@ -503,9 +465,7 @@ class FeedbackRepository {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Category frequency summary: total cases and still-open cases per category.
-     */
+    
     public function getCategoryFrequencySummary(): array {
         $stmt = $this->pdo->query(
             'SELECT c.name AS category,

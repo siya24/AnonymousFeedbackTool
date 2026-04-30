@@ -9,11 +9,7 @@ final class LdapAuthService
     {
     }
 
-    /**
-     * Authenticate against LDAP and return profile data on success.
-     *
-     * @return array{name:string,email:string,username:string,email_upn:string}|null
-     */
+    
     public function authenticate(string $identifier, string $password): ?array
     {
         $identifier = trim($identifier);
@@ -50,7 +46,7 @@ final class LdapAuthService
         $bindUser = trim((string) ($this->config['ldap_service_user'] ?? ''));
         $bindPassword = trim((string) ($this->config['ldap_service_password'] ?? ''));
 
-        // AD.cs pattern: bind with service account, search user in subtree.
+        
         if ($bindUser !== '' && $bindPassword !== '') {
             if (@ldap_bind($connection, $bindUser, $bindPassword)) {
                 $entry = $this->searchUserEntry($connection, $baseDn, $identifier);
@@ -78,7 +74,7 @@ final class LdapAuthService
                             }
                         }
 
-                        // Reconnect for direct-bind fallback after DN verify failure.
+                        
                         $connection = @ldap_connect($host, $port);
                         if ($connection === false) {
                             return null;
@@ -95,7 +91,7 @@ final class LdapAuthService
             }
         }
 
-        // Fallback for environments that do not expose a service bind account.
+        
         $candidates = $this->buildBindCandidates($identifier);
         $successfulBind = false;
 
@@ -129,9 +125,7 @@ final class LdapAuthService
         ];
     }
 
-    /**
-     * @return string[]
-     */
+    
     private function buildBindCandidates(string $identifier): array
     {
         $domain = trim((string) ($this->config['ldap_domain'] ?? ''));
@@ -187,7 +181,7 @@ final class LdapAuthService
         $upnFilter = $escapedEmail !== '' ? '(userPrincipalName=' . $escapedEmail . ')' : '(userPrincipalName=' . $escapedUsername . ')';
         $mailFilter = $escapedEmail !== '' ? '(mail=' . $escapedEmail . ')' : '(mail=' . $escapedUsername . ')';
 
-        // Mirrors AD.cs search intent and adds UPN/email support.
+        
         $filter = '(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=' . $escapedUsername . ')(employeeID=' . $escapedUsername . ')' . $upnFilter . $mailFilter . ')))';
         $attributes = ['dn', 'displayName', 'mail', 'sAMAccountName', 'userPrincipalName', 'memberOf', 'department', 'distinguishedName'];
         $search = @ldap_search($connection, $baseDn, $filter, $attributes);
@@ -204,9 +198,7 @@ final class LdapAuthService
         return $entries[0];
     }
 
-    /**
-     * @return array{name:string,email:string,username:string,email_upn:string,groups:list<string>}
-     */
+    
     private function mapProfileFromEntry(array $entry, string $identifier): array
     {
         $username = $this->extractUsername($identifier);
@@ -220,7 +212,7 @@ final class LdapAuthService
             $displayName = $samAccountName !== '' ? $samAccountName : $username;
         }
 
-        // Collect all group DNs from the memberOf attribute.
+        
         $rawGroups = $entry['memberof'] ?? [];
         $groups = [];
         $groupCount = (int) ($rawGroups['count'] ?? 0);
@@ -231,10 +223,10 @@ final class LdapAuthService
             }
         }
 
-        // distinguishedName — used for OU-based access matching.
+        
         $distinguishedName = trim((string) ($entry['distinguishedname'][0] ?? $entry['dn'] ?? ''));
 
-        // department — used for department-based access matching.
+        
         $department = trim((string) ($entry['department'][0] ?? ''));
 
         return [

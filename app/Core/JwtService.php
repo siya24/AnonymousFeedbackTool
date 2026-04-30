@@ -4,7 +4,7 @@ namespace App\Core;
 
 class JwtService {
     private string $secret;
-    private int $expiresIn = 86400; // 24 hours
+    private int $expiresIn = 86400; 
 
     public function __construct(string $secret) {
         if (empty($secret)) {
@@ -13,9 +13,7 @@ class JwtService {
         $this->secret = $secret;
     }
 
-    /**
-     * Generate a JWT token
-     */
+    
     public function encode(array $payload, ?int $expiresIn = null): string {
         $issuedAt = time();
         $expiresAt = $issuedAt + ($expiresIn ?? $this->expiresIn);
@@ -44,9 +42,7 @@ class JwtService {
         return $headerEncoded . '.' . $payloadEncoded . '.' . $signatureEncoded;
     }
 
-    /**
-     * Verify and decode a JWT token
-     */
+    
     public function decode(string $token): ?array {
         $parts = explode('.', $token);
         
@@ -56,7 +52,7 @@ class JwtService {
 
         [$headerEncoded, $payloadEncoded, $signatureEncoded] = $parts;
 
-        // Verify signature
+        
         $signature = hash_hmac(
             'sha256',
             $headerEncoded . '.' . $payloadEncoded,
@@ -69,7 +65,7 @@ class JwtService {
             return null;
         }
 
-        // Decode payload
+        
         $payload = json_decode(
             $this->base64UrlDecode($payloadEncoded),
             true
@@ -79,7 +75,7 @@ class JwtService {
             return null;
         }
 
-        // Check expiration
+        
         if (isset($payload['exp']) && $payload['exp'] < time()) {
             return null;
         }
@@ -87,9 +83,7 @@ class JwtService {
         return $payload;
     }
 
-    /**
-     * Get token from Authorization header
-     */
+    
     public static function getBearerToken(): ?string {
         $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
         

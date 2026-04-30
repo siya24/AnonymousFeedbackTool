@@ -11,18 +11,14 @@ class FeedbackService {
         private NotificationService $notificationService
     ) {}
 
-    /**
-     * Generate a unique reference number
-     */
+    
     public function generateReference(string $prefix = 'AF'): string {
         $date = (new DateTime())->format('Ymd');
         $random = strtoupper(bin2hex(random_bytes(3)));
         return "{$prefix}-{$date}-{$random}";
     }
 
-    /**
-     * Submit new feedback
-     */
+    
     public function submitFeedback(string $category, string $description, ?string $categoryOther = null): array {
         $reference = $this->generateReference('AF');
 
@@ -33,11 +29,11 @@ class FeedbackService {
 
         $feedbackId = $this->repository->createReport($reference, $categoryId, $normalizedOther, $description);
 
-        // Log audit trail
+        
         $this->repository->logAudit('anonymous', 'feedback_submitted', $reference,
             "New feedback submitted in category: {$category}");
 
-        // Send immediate HR email alert and log notification.
+        
         $this->notificationService->notifyNewFeedback($feedbackId, $reference, $category);
 
         return [
@@ -49,9 +45,7 @@ class FeedbackService {
         ];
     }
 
-    /**
-     * Submit follow-up to existing feedback
-     */
+    
     public function submitFollowUp(string $reference, string $updateText): array {
         $report = $this->repository->findByReference($reference);
         
@@ -62,11 +56,11 @@ class FeedbackService {
         $updateReference = $this->generateReference('UPD');
         $updateId = $this->repository->createUpdate((string)$report['id'], $updateReference, $updateText);
         
-        // Log audit trail
+        
         $this->repository->logAudit('anonymous', 'followup_submitted', $reference,
             "Follow-up submitted: {$updateReference}");
 
-        // Notify HR of the reporter's follow-up
+        
         $this->notificationService->notifyFollowUpSubmitted(
             (string)$report['id'],
             $reference,
@@ -81,9 +75,7 @@ class FeedbackService {
         ];
     }
 
-    /**
-     * Get feedback case details
-     */
+    
     public function getCaseDetails(string $reference): array {
         $detailed = $this->repository->getDetailedReport($reference);
         
@@ -94,16 +86,12 @@ class FeedbackService {
         return $detailed;
     }
 
-    /**
-     * Get public anonymized reports with filters
-     */
+    
     public function getPublicReports(array $filters = []): array {
         return $this->repository->listPublicReports($filters);
     }
 
-    /**
-     * Get HR case list with filters
-     */
+    
     public function listCasesForHr(array $filters = [], int $page = 1, int $perPage = 10): array {
         $total = $this->repository->countCases($filters);
         $items = $this->repository->listCasesPaged($filters, $page, $perPage);
@@ -117,9 +105,7 @@ class FeedbackService {
         ];
     }
 
-    /**
-     * Get dashboard trend and status aggregates.
-     */
+    
     public function getDashboardTrends(): array {
         return [
             'quarterly_by_category' => $this->repository->getQuarterlyCategoryTrends(),
@@ -128,12 +114,9 @@ class FeedbackService {
         ];
     }
 
-    /**
-     * Process scheduled notification reminders/escalations.
-     * Also enforces the 5-year audit log retention policy on each run.
-     */
+    
     public function processScheduledNotifications(): array {
-        // Enforce 5-year (1825-day) audit log retention as required by Technical Requirements §6.
+        
         $pruned = $this->repository->pruneOldAuditLogs(1825);
 
         $result = $this->notificationService->processScheduledNotifications();
@@ -141,9 +124,7 @@ class FeedbackService {
         return $result;
     }
 
-    /**
-     * Update case for HR
-     */
+    
     public function updateCaseForHr(string $reference, array $updateData, string $hrUserId): array {
         $report = $this->repository->findByReference($reference);
         
@@ -151,12 +132,12 @@ class FeedbackService {
             throw new \RuntimeException('Feedback case not found', 404);
         }
 
-        // Validate status transitions
+        
         if ($updateData['status'] === 'Investigation completed' && empty($updateData['outcome_comments'])) {
             throw new \RuntimeException('Outcome comments required when marking as completed', 400);
         }
 
-        // Handle acknowledgement
+        
         if ($updateData['acknowledge'] ?? false) {
             $updateData['acknowledged_at'] = date('Y-m-d H:i:s');
             unset($updateData['acknowledge']);
@@ -164,10 +145,10 @@ class FeedbackService {
             unset($updateData['acknowledge']);
         }
 
-        // Update the report and persist direct updater attribution.
+        
         $this->repository->updateReport($reference, $updateData, $hrUserId);
         
-        // Log audit trail
+        
         $details = json_encode($updateData);
         $this->repository->logAudit("hr:{$hrUserId}", 'case_updated', $reference, $details, $hrUserId);
         
@@ -178,13 +159,11 @@ class FeedbackService {
         ];
     }
 
-    /**
-     * Store multiple attachments
-     */
+    
     public function storeAttachments(string $feedbackId, ?string $updateId, array $files): array {
         $stored = [];
         $allowed = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'gif', 'mp3', 'wav'];
-        $maxSize = 10 * 1024 * 1024; // 10MB
+        $maxSize = 10 * 1024 * 1024; 
 
         foreach ($files['name'] ?? [] as $index => $name) {
             $error = $files['error'][$index] ?? null;
@@ -204,12 +183,12 @@ class FeedbackService {
                 throw new \RuntimeException("File type {$ext} not allowed", 400);
             }
 
-            // Map each extension to all MIME types that are valid for it (magic-bytes check).
+            
             $mimeMap = [
                 'pdf'  => ['application/pdf'],
                 'doc'  => ['application/msword'],
                 'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                           'application/zip'], // OOXML files are ZIP containers
+                           'application/zip'], 
                 'jpg'  => ['image/jpeg'],
                 'jpeg' => ['image/jpeg'],
                 'png'  => ['image/png'],
@@ -218,7 +197,7 @@ class FeedbackService {
                 'wav'  => ['audio/wav', 'audio/x-wav'],
             ];
 
-            // Validate actual file content against expected MIME types (prevents extension spoofing).
+            
             if (function_exists('finfo_open')) {
                 $finfo        = finfo_open(FILEINFO_MIME_TYPE);
                 $detectedMime = finfo_file($finfo, $tmpName);

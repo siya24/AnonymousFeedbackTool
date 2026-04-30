@@ -16,17 +16,13 @@ final class StatusApiController
         $this->statusRepository = Container::get('statusRepository');
     }
 
-    /**
-     * GET /api/statuses
-     */
+    
     public function listActive(array $params = []): void
     {
         Response::json(['data' => $this->statusRepository->getActive()]);
     }
 
-    /**
-     * GET /api/statuses/{id}
-     */
+    
     public function getById(array $params): void
     {
         $id = trim((string) ($params['id'] ?? ''));

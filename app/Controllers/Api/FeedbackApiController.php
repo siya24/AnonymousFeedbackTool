@@ -17,10 +17,7 @@ final class FeedbackApiController
         $this->feedbackService = Container::get('feedbackService');
     }
 
-    /**
-     * Submit new anonymous feedback
-     * POST /api/feedback
-     */
+    
     public function submit(array $params = []): void
     {
         try {
@@ -39,7 +36,7 @@ final class FeedbackApiController
 
             $result = $this->feedbackService->submitFeedback($category, $description, $categoryOther !== '' ? $categoryOther : null);
             
-            // Handle attachments
+            
             if (isset($_FILES['attachments'])) {
                 $this->feedbackService->storeAttachments(
                     (string) ($result['feedback_id'] ?? $result['report_id'] ?? ''),
@@ -58,10 +55,7 @@ final class FeedbackApiController
         }
     }
 
-    /**
-     * Submit follow-up to existing feedback
-     * POST /api/feedback/update
-     */
+    
     public function submitUpdate(array $params = []): void
     {
         try {
@@ -75,7 +69,7 @@ final class FeedbackApiController
 
             $result = $this->feedbackService->submitFollowUp($referenceNo, $updateText);
             
-            // Handle attachments
+            
             if (isset($_FILES['attachments'])) {
                 $reportDetail = $this->feedbackService->getCaseDetails($referenceNo);
                 $reportFeedbackId = (string) ($reportDetail['report']['id'] ?? '');
@@ -100,10 +94,7 @@ final class FeedbackApiController
         }
     }
 
-    /**
-     * Get feedback case details by reference
-     * GET /api/feedback/{reference}
-     */
+    
     public function getByReference(array $params): void
     {
         try {
@@ -131,10 +122,7 @@ final class FeedbackApiController
         }
     }
 
-    /**
-     * Download attachment file
-     * GET /api/attachments/{id}
-     */
+    
     public function downloadAttachment(array $params): void
     {
         $id = (int) ($params['id'] ?? 0);
@@ -154,7 +142,7 @@ final class FeedbackApiController
             Response::json(['error' => 'File not found on server'], 404);
         }
 
-        // Sanitize filename for Content-Disposition header
+        
         $safeName = preg_replace('/[^\w.\- ]/', '_', $attachment['original_name']);
 
         header('Content-Type: ' . ($attachment['mime_type'] ?: 'application/octet-stream'));
@@ -165,10 +153,7 @@ final class FeedbackApiController
         exit;
     }
 
-    /**
-     * Get public anonymized reports
-     * GET /api/reports
-     */
+    
     public function publicReports(array $params = []): void
     {
         try {

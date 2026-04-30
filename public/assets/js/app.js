@@ -2,7 +2,6 @@ const byId = (id) => document.getElementById(id);
 const API_BASE = '/api';
 const escHtml = (str) => String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-// JWT Token management
 const TokenManager = {
     getToken: () => localStorage.getItem('hr_token'),
     setToken: (token) => localStorage.setItem('hr_token', token),
@@ -164,7 +163,6 @@ function initPublicForms() {
     const newFeedbackConfirmation = byId('new-feedback-confirmation');
     const newFeedbackReference = byId('new-feedback-reference');
 
-    // Populate category selects from the API
     const categoryNew = byId('category-new');
     const categoryOtherWrapper = byId('category-other-wrapper');
     const categoryOtherText = byId('category-other-text');
@@ -321,7 +319,6 @@ function initPublicForms() {
             reportTable.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-circle me-2"></i>Could not load reports.</div>';
         });
 
-        // Auto-refresh employee reporting so updates are visible without manual reload.
         setInterval(() => {
             const isVisible = reportingTab?.classList.contains('active') || reportingTab?.classList.contains('show');
             if (!isVisible) {
@@ -378,7 +375,6 @@ function initHrPage() {
         }
     };
 
-    // Check if already logged in
     if (TokenManager.hasToken()) {
         setLoggedInUi(true);
     }
@@ -724,7 +720,6 @@ function initHrCategories() {
         const data = await api(`${API_BASE}/hr/categories`);
         renderCategoryTable(data.data || []);
 
-        // Also refresh the filter select in the HR cases section
         const filterSelect = byId('filter-category');
         if (filterSelect) {
             const opts = (data.data || []).map(c => `<option value="${escHtml(c.name)}">${escHtml(c.name)}</option>`).join('');

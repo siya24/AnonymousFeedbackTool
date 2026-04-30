@@ -3,11 +3,7 @@ declare(strict_types=1);
 
 namespace App\Core;
 
-/**
- * Minimal SMTP mailer using PHP stream sockets.
- * Supports STARTTLS (port 587) and SMTPS/SSL (port 465).
- * No external dependencies required.
- */
+
 final class SmtpMailer
 {
     public function __construct(
@@ -20,21 +16,13 @@ final class SmtpMailer
         private readonly int    $timeoutSeconds = 15,
     ) {}
 
-    /**
-     * Send a plain-text email.
-     *
-     * @throws \RuntimeException on connection or SMTP protocol failure
-     */
+    
     public function send(string $to, string $subject, string $body): void
     {
         $this->sendMail($to, $subject, $body, false);
     }
 
-    /**
-     * Send an HTML email (plain-text fallback auto-generated).
-     *
-     * @throws \RuntimeException on connection or SMTP protocol failure
-     */
+    
     public function sendHtml(string $to, string $subject, string $htmlBody, string $plainBody = ''): void
     {
         $this->sendMail($to, $subject, $htmlBody, true, $plainBody);
@@ -62,7 +50,7 @@ final class SmtpMailer
             $this->write($socket, 'EHLO ' . gethostname());
             $ehloResponse = $this->readAll($socket);
 
-            // STARTTLS upgrade for port 587
+            
             if (!$ssl && str_contains($ehloResponse, 'STARTTLS')) {
                 $this->write($socket, 'STARTTLS');
                 $this->expect($socket, 220);
@@ -73,7 +61,7 @@ final class SmtpMailer
                 $this->readAll($socket);
             }
 
-            // AUTH LOGIN
+            
             $this->write($socket, 'AUTH LOGIN');
             $this->expect($socket, 334);
             $this->write($socket, base64_encode($this->username));
@@ -81,13 +69,13 @@ final class SmtpMailer
             $this->write($socket, base64_encode($this->password));
             $this->expect($socket, 235);
 
-            // Envelope
+            
             $this->write($socket, 'MAIL FROM:<' . $this->fromAddress . '>');
             $this->expect($socket, 250);
             $this->write($socket, 'RCPT TO:<' . $to . '>');
             $this->expect($socket, 250);
 
-            // Headers + body
+            
             $this->write($socket, 'DATA');
             $this->expect($socket, 354);
 
@@ -131,7 +119,7 @@ final class SmtpMailer
                 $message = $headers . "\r\n\r\n" . quoted_printable_encode($body);
             }
 
-            // Dot-stuffing: lines that are exactly "." must be doubled
+            
             $message = preg_replace('/^\.$/m', '..', $message);
 
             fwrite($socket, $message . "\r\n.\r\n");
@@ -143,7 +131,7 @@ final class SmtpMailer
         }
     }
 
-    // ── Helpers ─────────────────────────────────────────────────────────────
+    
 
     private function write($socket, string $command): void
     {
@@ -155,7 +143,7 @@ final class SmtpMailer
         $response = '';
         while ($line = fgets($socket, 512)) {
             $response .= $line;
-            // 4th char is ' ' when this is the last response line
+            
             if (isset($line[3]) && $line[3] === ' ') {
                 break;
             }

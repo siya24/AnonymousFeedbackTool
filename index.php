@@ -15,7 +15,7 @@ use App\Core\Router;
 
 require __DIR__ . '/app/bootstrap.php';
 
-// Block direct web access to the uploads directory; files must be served via /api/attachments/{id}
+
 if (str_starts_with(\App\Core\Request::path(), '/uploads')) {
     http_response_code(403);
     header('Content-Type: application/json; charset=utf-8');
@@ -23,13 +23,13 @@ if (str_starts_with(\App\Core\Request::path(), '/uploads')) {
     exit;
 }
 
-// APP_MODE controls which routes are registered.
-//   public — internet-facing server: feedback portal and its supporting APIs only.
-//   full   — intranet server: all routes including the HR Console and HR APIs.
+
+
+
 $appMode    = strtolower(trim((string) (getenv('APP_MODE') ?: 'full')));
 $isFullMode = ($appMode === 'full');
 
-// In public mode, reject HR paths immediately — no controller or class is loaded.
+
 if (!$isFullMode && (
     str_starts_with(Request::path(), '/hr') ||
     str_starts_with(Request::path(), '/api/hr')
@@ -42,7 +42,7 @@ if (!$isFullMode && (
 
 $router = new Router();
 
-// ── Public routes (available in both modes) ───────────────────────────────────
+
 $router->add('GET', '/', [PageController::class, 'home']);
 $router->add('POST', '/api/feedback', [FeedbackApiController::class, 'submit']);
 $router->add('POST', '/api/feedback/update', [FeedbackApiController::class, 'submitUpdate']);
@@ -57,7 +57,7 @@ $router->add('GET', '/api/stages', [StageApiController::class, 'listActive']);
 $router->add('GET', '/api/stages/{id}', [StageApiController::class, 'getById']);
 
 if ($isFullMode) {
-    // ── HR Console web routes (intranet only) ─────────────────────────────────
+    
     $router->add('GET', '/hr', [PageController::class, 'hr']);
     $router->add('GET', '/hr/cases/{reference}', [PageController::class, 'hrCase']);
     $router->add('GET', '/hr/dashboard', [PageController::class, 'hrDashboard']);
@@ -67,7 +67,7 @@ if ($isFullMode) {
     $router->add('GET', '/api/docs', [PageController::class, 'apiDocs']);
     $router->add('GET', '/api/openapi.json', [PageController::class, 'openApiSpec']);
 
-    // ── HR API routes (intranet only, JWT-protected) ──────────────────────────
+    
     $router->add('POST', '/api/hr/login', [HrApiController::class, 'login']);
     $router->add('POST', '/api/hr/logout', [HrApiController::class, 'logout']);
     $router->add('GET', '/api/hr/me', [HrApiController::class, 'getCurrentUser']);

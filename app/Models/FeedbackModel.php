@@ -204,7 +204,7 @@ final class FeedbackModel
             throw new \RuntimeException('Outcome comments are mandatory when status is Investigation completed.');
         }
 
-        // Resolve status name → id.
+        
         $statusStmt = $this->pdo->prepare('SELECT id FROM statuses WHERE name = ? LIMIT 1');
         $statusStmt->execute([$newStatus]);
         $statusId = (string) ($statusStmt->fetchColumn() ?: '');

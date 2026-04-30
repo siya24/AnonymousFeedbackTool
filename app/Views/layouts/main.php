@@ -11,6 +11,10 @@
     <link rel="icon" type="image/x-icon" href="/public/favicon.ico">
 </head>
 <body>
+<?php
+$appMode = strtolower(trim((string) (getenv('APP_MODE') ?: 'full')));
+$isFullMode = ($appMode === 'full');
+?>
 <header>
     <nav class="navbar navbar-expand-lg navbar-light sticky-top" style="background-color: #f8f9fa; border-bottom: 3px solid #9d2722;">
         <div class="container-fluid">
@@ -20,7 +24,7 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto align-items-center">
                     <li class="nav-item"><a class="nav-link" href="/" style="color: #9d2722;"><i class="fas fa-home me-1"></i>Home</a></li>
-                    <?php if ((strtolower(trim((string) (getenv('APP_MODE') ?: 'full'))) === 'full')): ?>
+                    <?php if ($isFullMode): ?>
                     <li class="nav-item" id="nav-hr-console-item" style="display:none;"><a class="nav-link" href="/hr" style="color: #008AC4;"><i class="fas fa-shield-alt me-1"></i>HR Console</a></li>
                     <li class="nav-item ms-2" id="nav-hr-login-item">
                         <a class="btn btn-primary btn-sm" href="/hr" id="nav-hr-login">

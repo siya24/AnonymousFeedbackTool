@@ -38,9 +38,7 @@ class NotificationService
         return in_array($domain, $blockedDomains, true);
     }
 
-    /**
-     * @return string[]
-     */
+    
     private function resolveRecipientsByRole(string $role, string $fallbackEmail): array
     {
         $recipients = $this->repository->getRecipientsByRole($role);
@@ -56,12 +54,7 @@ class NotificationService
         return array_values(array_unique($recipients));
     }
 
-    /**
-     * When DEV_NOTIFICATION_EMAIL is set, redirect all recipients to that address.
-     *
-     * @param  string[] $recipients
-     * @return string[]
-     */
+    
     private function applyDevOverride(array $recipients): array
     {
         $override = getenv('DEV_NOTIFICATION_EMAIL');
@@ -73,7 +66,7 @@ class NotificationService
 
     private static function detectBaseUrl(): string
     {
-        // In CLI context (cron jobs) there is no HTTP request — APP_BASE_URL must be set.
+        
         if (PHP_SAPI === 'cli') {
             return 'http://localhost';
         }
@@ -82,7 +75,7 @@ class NotificationService
         $host   = $_SERVER['HTTP_HOST'] ?? ($_SERVER['SERVER_NAME'] ?? 'localhost');
         $port   = (int) ($_SERVER['SERVER_PORT'] ?? 80);
 
-        // Only append non-standard ports when HTTP_HOST doesn't already include one
+        
         if (!str_contains((string) $host, ':')) {
             if ($scheme === 'https' && $port !== 443) {
                 $host .= ':' . $port;

@@ -8,11 +8,7 @@ final class EmailTemplateRenderer
         private readonly string $templateBasePath,
     ) {}
 
-    /**
-     * Render the notification email HTML from a standalone template file.
-     *
-     * @param array<string, string> $data
-     */
+    
     public function renderNotification(array $data): string
     {
         $templatePath = rtrim($this->templateBasePath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'notification.php';

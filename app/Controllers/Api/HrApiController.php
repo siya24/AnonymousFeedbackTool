@@ -28,11 +28,7 @@ final class HrApiController
         $this->appConfig = Container::get('config')['app'] ?? [];
     }
 
-    /**
-     * JWT-based authentication for HR/Ethics users
-     * POST /api/hr/login
-     * Body: { "email": "...", "password": "..." }
-     */
+    
     public function login(array $params = []): void
     {
         $input = Request::input();
@@ -74,7 +70,7 @@ final class HrApiController
 
         $this->recordLoginAttempt($ip, true);
 
-        // Generate JWT token
+        
         $jwt = Container::get('jwt');
         $token = $jwt->encode([
             'user_id' => $user['id'],
@@ -98,9 +94,9 @@ final class HrApiController
     private function authenticateLocal(string $email, string $password): ?array
     {
         $stmt = $this->db->prepare(
-            'SELECT id, name, email, password_hash, role FROM users WHERE email = ? AND is_active = 1'
+            'SELECT id, name, email, password_hash, role FROM users WHERE email = ? AND role = ? AND is_active = 1'
         );
-        $stmt->execute([$email]);
+        $stmt->execute([$email, Authorization::ROLE_HR]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$user || !password_verify($password, $user['password_hash'])) {
@@ -130,7 +126,7 @@ final class HrApiController
             );
             $stmt->execute([$ip, $success ? 1 : 0]);
         } catch (\Throwable $e) {
-            // Non-blocking: do not fail login if logging fails.
+            
         }
     }
 
@@ -141,9 +137,9 @@ final class HrApiController
             return null;
         }
 
-        // ── Group-based access control ────────────────────────────────────────
-        // When LDAP groups are configured, ONLY members of those groups may access
-        // the HR Console. The role is derived from which group they belong to.
+        
+        
+        
         $hrGroupsRaw = trim((string) ($this->appConfig['ldap_hr_groups'] ?? ''));
         $isGroupsRaw = trim((string) ($this->appConfig['ldap_is_groups'] ?? ''));
         $hrOusRaw    = trim((string) ($this->appConfig['ldap_hr_ous'] ?? ''));
@@ -155,7 +151,7 @@ final class HrApiController
             || $hrDeptsRaw !== '' || $isDeptsRaw !== '';
 
         if ($groupsConfigured) {
-            // Developer override always bypasses group/OU/department restrictions.
+            
             if ($this->isDeveloperOverrideUser($identifier, $profile)) {
                 return $this->upsertLdapUser($identifier, $profile, Authorization::ROLE_HR);
             }
@@ -170,7 +166,7 @@ final class HrApiController
             return $this->upsertLdapUser($identifier, $profile, $role);
         }
 
-        // ── Fallback: groups not configured — use DB lookup + developer override
+        
         $emailCandidates = [];
         $profileEmail = strtolower(trim((string) ($profile['email'] ?? '')));
         $inputEmail = strtolower(trim($identifier));
@@ -192,9 +188,9 @@ final class HrApiController
 
         foreach ($emailCandidates as $candidate) {
             $stmt = $this->db->prepare(
-                'SELECT id, name, email, password_hash, role FROM users WHERE email = ? AND is_active = 1'
+                'SELECT id, name, email, password_hash, role FROM users WHERE email = ? AND role = ? AND is_active = 1'
             );
-            $stmt->execute([$candidate]);
+            $stmt->execute([$candidate, Authorization::ROLE_HR]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($user) {
@@ -209,19 +205,10 @@ final class HrApiController
         throw new \RuntimeException('LDAP authenticated, but user is not provisioned for HR Console', 403);
     }
 
-    /**
-     * Resolve an HR Console role from the LDAP profile using three layers:
-     *   1. Group membership (memberOf)
-     *   2. OU path in the user's distinguishedName
-     *   3. AD department attribute
-     *
-     * Returns ROLE_HR on any match, null if none matched.
-     *
-     * Config values use pipe (|) as delimiter so full DNs with commas are safe.
-     */
+    
     private function resolveRoleFromLdapProfile(array $profile): ?string
     {
-        // Helper: split pipe-delimited config value into lowercase trimmed tokens.
+        
         $split = static function (string $raw): array {
             return array_values(array_filter(array_map(
                 static fn (string $v): string => strtolower(trim($v)),
@@ -244,14 +231,14 @@ final class HrApiController
             return null;
         }
 
-        // ── Layer 1: group membership ────────────────────────────────────────
+        
         foreach (($profile['groups'] ?? []) as $groupDn) {
             $normDn = strtolower(trim($groupDn));
-            // Match full DN
+            
             if (in_array($normDn, $hrGroups, true) || in_array($normDn, $isGroups, true)) {
                 return Authorization::ROLE_HR;
             }
-            // Match by CN alone (e.g. config value "HR" matches "CN=HR,OU=...")
+            
             if (preg_match('/^cn=([^,]+)/i', $groupDn, $m)) {
                 $cn = strtolower(trim($m[1]));
                 if (in_array($cn, $hrGroups, true) || in_array($cn, $isGroups, true)) {
@@ -260,8 +247,8 @@ final class HrApiController
             }
         }
 
-        // ── Layer 2: OU path in distinguishedName ────────────────────────────
-        // e.g. "OU=Information Services" is a substring of the user's full DN
+        
+        
         $userDn = strtolower(trim((string) ($profile['distinguished_name'] ?? '')));
         if ($userDn !== '') {
             foreach ($hrOus as $ou) {
@@ -276,7 +263,7 @@ final class HrApiController
             }
         }
 
-        // ── Layer 3: department attribute ────────────────────────────────────
+        
         $userDept = strtolower(trim((string) ($profile['department'] ?? '')));
         if ($userDept !== '') {
             foreach (array_merge($hrDepts, $isDepts) as $dept) {
@@ -348,7 +335,7 @@ final class HrApiController
             $name = trim((string) ($profile['username'] ?? $identifier));
         }
 
-        // LDAP users have no local password; placeholder satisfies schema constraints.
+        
         $placeholderHash = password_hash(bin2hex(random_bytes(16)), PASSWORD_BCRYPT);
 
         $upsert = $this->db->prepare(
@@ -395,26 +382,19 @@ final class HrApiController
         return '';
     }
 
-    /**
-     * Logout (client-side removes JWT token)
-     * POST /api/hr/logout
-     */
+    
     public function logout(array $params = []): void
     {
         Response::json(['message' => 'Logged out successfully']);
     }
 
-    /**
-     * List cases for authenticated HR/Ethics users
-     * GET /api/hr/cases
-    * Query: ?reference_no=...&category=...&status=...&date=...&sort_by=...&sort_order=...
-     */
+    
     public function listCases(array $params = []): void
     {
         try {
-            // Authenticate and authorize
+            
             $this->auth->authenticate();
-            $this->auth->requireAnyRole([Authorization::ROLE_HR, Authorization::ROLE_ETHICS]);
+            $this->auth->requireRole(Authorization::ROLE_HR);
 
             $filters = [
                 'reference_no' => Request::query('reference_no'),
@@ -444,16 +424,13 @@ final class HrApiController
         }
     }
 
-    /**
-     * Get detailed case information
-     * GET /api/hr/cases/{reference}
-     */
+    
     public function caseDetail(array $params): void
     {
         try {
-            // Authenticate and authorize
+            
             $this->auth->authenticate();
-            $this->auth->requireAnyRole([Authorization::ROLE_HR, Authorization::ROLE_ETHICS]);
+            $this->auth->requireRole(Authorization::ROLE_HR);
 
             $reference = strtoupper(trim((string) ($params['reference'] ?? '')));
             
@@ -469,15 +446,11 @@ final class HrApiController
         }
     }
 
-    /**
-     * Update case status, priority, notes, etc.
-     * POST /api/hr/cases/{reference}
-     * Body: { "status": "...", "priority": "...", "internal_notes": "...", ... }
-     */
+    
     public function updateCase(array $params): void
     {
         try {
-            // Authenticate and authorize (HR role required for updates)
+            
             $this->auth->authenticate();
             $this->auth->requireRole(Authorization::ROLE_HR);
 
@@ -491,7 +464,7 @@ final class HrApiController
             $user = $this->auth->getUser();
             $userId = $user['user_id'] ?? 'unknown';
 
-            // Update through service layer
+            
             $result = $this->feedbackService->updateCaseForHr($reference, $payload, (string)$userId);
             Response::json($result);
         } catch (\RuntimeException $e) {
@@ -500,10 +473,7 @@ final class HrApiController
         }
     }
 
-    /**
-     * Get current authenticated user info
-     * GET /api/hr/me
-     */
+    
     public function getCurrentUser(array $params = []): void
     {
         try {
@@ -525,15 +495,12 @@ final class HrApiController
         }
     }
 
-    /**
-     * Dashboard trends for HR/Ethics users.
-     * GET /api/hr/dashboard/trends
-     */
+    
     public function dashboardTrends(array $params = []): void
     {
         try {
             $this->auth->authenticate();
-            $this->auth->requireAnyRole([Authorization::ROLE_HR, Authorization::ROLE_ETHICS]);
+            $this->auth->requireRole(Authorization::ROLE_HR);
 
             $data = $this->feedbackService->getDashboardTrends();
             Response::json(['data' => $data]);

@@ -16,17 +16,13 @@ final class StageApiController
         $this->stageRepository = Container::get('stageRepository');
     }
 
-    /**
-     * GET /api/stages
-     */
+    
     public function listActive(array $params = []): void
     {
         Response::json(['data' => $this->stageRepository->getActive()]);
     }
 
-    /**
-     * GET /api/stages/{id}
-     */
+    
     public function getById(array $params): void
     {
         $id = trim((string) ($params['id'] ?? ''));
