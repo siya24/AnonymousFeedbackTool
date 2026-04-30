@@ -396,7 +396,9 @@ Anonymity is enforced at the application layer:
 
 ## 9. File Upload Handling
 
-- Accepted MIME types are validated server-side (PDF, Word documents, images)
+- Accepted MIME types are validated server-side (documents, images, audio, video, archives)
+- Mixed-format multiple attachments are supported in a single submission
+- Per-file size limit is 25MB
 - Files are stored in the `/uploads/` directory using a randomised `stored_name`
 - The `/uploads/` path is blocked at the front controller level (HTTP 403) — files can only be downloaded via `/api/attachments/{id}`
 - Attachment records are linked to either a `feedback_id` or a `report_update_id` (not both)

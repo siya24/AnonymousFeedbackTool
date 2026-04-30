@@ -162,8 +162,21 @@ class FeedbackService {
     
     public function storeAttachments(string $feedbackId, ?string $updateId, array $files): array {
         $stored = [];
-        $allowed = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'gif', 'mp3', 'wav'];
-        $maxSize = 10 * 1024 * 1024; 
+        $allowed = [
+            'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'csv', 'txt',
+            'jpg', 'jpeg', 'png', 'gif',
+            'mp3', 'wav', 'm4a',
+            'mp4', 'webm', 'mov',
+            'zip', 'rar', '7z'
+        ];
+        $maxSize = 25 * 1024 * 1024;
+        $uploadDir = realpath(__DIR__ . '/../../uploads');
+        if ($uploadDir === false) {
+            $uploadDir = __DIR__ . '/../../uploads';
+            if (!is_dir($uploadDir) && !mkdir($uploadDir, 0750, true)) {
+                throw new \RuntimeException('Failed to initialize internal upload directory', 500);
+            }
+        }
 
         foreach ($files['name'] ?? [] as $index => $name) {
             $error = $files['error'][$index] ?? null;
@@ -189,12 +202,27 @@ class FeedbackService {
                 'doc'  => ['application/msword'],
                 'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                            'application/zip'], 
+                'xls'  => ['application/vnd.ms-excel'],
+                'xlsx' => ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                           'application/zip'],
+                'ppt'  => ['application/vnd.ms-powerpoint'],
+                'pptx' => ['application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                           'application/zip'],
+                'csv'  => ['text/csv', 'text/plain', 'application/vnd.ms-excel'],
+                'txt'  => ['text/plain'],
                 'jpg'  => ['image/jpeg'],
                 'jpeg' => ['image/jpeg'],
                 'png'  => ['image/png'],
                 'gif'  => ['image/gif'],
                 'mp3'  => ['audio/mpeg', 'audio/mp3'],
                 'wav'  => ['audio/wav', 'audio/x-wav'],
+                'm4a'  => ['audio/mp4', 'audio/x-m4a'],
+                'mp4'  => ['video/mp4'],
+                'webm' => ['video/webm'],
+                'mov'  => ['video/quicktime'],
+                'zip'  => ['application/zip', 'application/x-zip-compressed'],
+                'rar'  => ['application/vnd.rar', 'application/x-rar-compressed'],
+                '7z'   => ['application/x-7z-compressed'],
             ];
 
             
@@ -212,7 +240,7 @@ class FeedbackService {
             }
 
             $storedName = bin2hex(random_bytes(16)) . '.' . $ext;
-            $uploadPath = __DIR__ . '/../../uploads/' . $storedName;
+            $uploadPath = $uploadDir . DIRECTORY_SEPARATOR . $storedName;
 
             if (!move_uploaded_file($tmpName, $uploadPath)) {
                 throw new \RuntimeException("Failed to store file {$name}", 500);

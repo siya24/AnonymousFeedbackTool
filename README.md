@@ -129,11 +129,12 @@ JWT_SECRET=your-secret-key-here
 #### Submit Anonymous Feedback
 ```http
 POST /api/feedback
-Content-Type: application/json
+Content-Type: multipart/form-data
 
 {
   "category": "Discrimination|Harassment|...",
-  "description": "Feedback text (max 5000 chars)"
+  "description": "Feedback text (max 5000 chars)",
+  "attachments[]": "Optional multiple files (documents, images, audio, video, archives; max 25MB each)"
 }
 
 Response: { "reference_no": "AF-20260423-ABC123" }

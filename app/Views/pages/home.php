@@ -37,8 +37,8 @@
                 </div>
                 <div class="mb-3">
                     <label for="attachments-new" class="form-label"><i class="fas fa-paperclip me-1"></i>Attachments (optional)</label>
-                    <input id="attachments-new" type="file" name="attachments[]" class="form-control" multiple>
-                    <small class="form-text text-muted">Acceptable formats: PDF, Word, images. Max 10MB each.</small>
+                    <input id="attachments-new" type="file" name="attachments[]" class="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,.gif,.mp3,.wav,.m4a,.mp4,.webm,.mov,.zip,.rar,.7z" multiple>
+                    <small class="form-text text-muted">Acceptable formats: documents, images, audio, video, archives. Max 25MB each.</small>
                 </div>
                 <button type="submit" class="btn btn-primary btn-lg">
                     <i class="fas fa-check me-2"></i>Submit Anonymously
@@ -79,7 +79,8 @@
                         </div>
                         <div class="mb-3">
                             <label for="attachments-followup" class="form-label">Attachments (optional)</label>
-                            <input id="attachments-followup" type="file" name="attachments[]" class="form-control" multiple>
+                            <input id="attachments-followup" type="file" name="attachments[]" class="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,.gif,.mp3,.wav,.m4a,.mp4,.webm,.mov,.zip,.rar,.7z" multiple>
+                            <small class="form-text text-muted">Acceptable formats: documents, images, audio, video, archives. Max 25MB each.</small>
                         </div>
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-paper-plane me-1"></i>Submit Follow-up

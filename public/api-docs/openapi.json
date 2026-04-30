@@ -141,7 +141,7 @@
                   "attachments[]": {
                     "type": "array",
                     "items": { "type": "string", "format": "binary" },
-                    "description": "Optional file attachments (PDF, Word, images, max 10MB each)"
+                    "description": "Optional file attachments (documents, images, audio, video, archives; max 25MB each)"
                   }
                 }
               }
