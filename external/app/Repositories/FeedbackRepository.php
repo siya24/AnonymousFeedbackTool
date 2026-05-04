@@ -245,40 +245,6 @@ class FeedbackRepository {
     }
 
     
-    public function listPublicReports(array $filters = []): array {
-        $query = 'SELECT r.reference_no, COALESCE(r.category_other, c.name) AS category,
-                         s.name AS status, r.anonymized_summary, r.outcome_comments, r.created_at
-                  FROM feedbacks r
-                  LEFT JOIN statuses s ON s.id = r.status_id
-                  LEFT JOIN categories c ON c.id = r.category_id
-                  WHERE 1=1';
-        $params = [];
-
-        if (!empty($filters['reference_no'])) {
-            $query .= ' AND r.reference_no LIKE ?';
-            $params[] = '%' . $filters['reference_no'] . '%';
-        }
-        if (!empty($filters['category'])) {
-            $query .= ' AND c.name = ?';
-            $params[] = $filters['category'];
-        }
-        if (!empty($filters['status'])) {
-            $query .= ' AND s.name = ?';
-            $params[] = $filters['status'];
-        }
-        if (!empty($filters['date'])) {
-            $query .= ' AND DATE(r.created_at) = ?';
-            $params[] = $filters['date'];
-        }
-
-        $query .= ' ORDER BY r.created_at DESC';
-
-        $stmt = $this->pdo->prepare($query);
-        $stmt->execute($params);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    
     public function updateReport(string $reference, array $data, ?string $updatedByUserId = null): bool {
         $allowed = ['priority', 'stage', 'status', 'anonymized_summary', 'action_taken',
                     'outcome_comments', 'internal_notes', 'acknowledged_at'];

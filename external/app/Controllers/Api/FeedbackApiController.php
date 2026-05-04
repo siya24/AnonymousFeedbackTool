@@ -180,23 +180,5 @@ final class FeedbackApiController
         readfile($uploadPath);
         exit;
     }
-
-    
-    public function publicReports(array $params = []): void
-    {
-        try {
-            $filters = [
-                'reference_no' => Request::query('reference_no'),
-                'category' => Request::query('category'),
-                'status' => Request::query('status'),
-                'date' => Request::query('date'),
-            ];
-
-            $reports = $this->feedbackService->getPublicReports($filters);
-            Response::json(['data' => $reports]);
-        } catch (\RuntimeException $e) {
-            Response::json(['error' => $e->getMessage()], 400);
-        }
-    }
 }
 

@@ -109,11 +109,6 @@ class FeedbackService {
     }
 
     
-    public function getPublicReports(array $filters = []): array {
-        return $this->repository->listPublicReports($filters);
-    }
-
-    
     public function listCasesForHr(array $filters = [], int $page = 1, int $perPage = 10): array {
         $total = $this->repository->countCases($filters);
         $items = $this->repository->listCasesPaged($filters, $page, $perPage);
