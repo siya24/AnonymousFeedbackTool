@@ -21,20 +21,4 @@ final class StageApiController
     {
         Response::json(['data' => $this->stageRepository->getActive()]);
     }
-
-    
-    public function getById(array $params): void
-    {
-        $id = trim((string) ($params['id'] ?? ''));
-        if ($id === '') {
-            Response::json(['error' => 'Invalid stage ID'], 400);
-        }
-
-        $stage = $this->stageRepository->findById($id);
-        if (!$stage || (int) ($stage['is_active'] ?? 0) !== 1) {
-            Response::json(['error' => 'Stage not found'], 404);
-        }
-
-        Response::json(['data' => $stage]);
-    }
 }

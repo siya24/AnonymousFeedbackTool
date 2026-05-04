@@ -109,29 +109,6 @@ class FeedbackService {
     }
 
     
-    public function listCasesForHr(array $filters = [], int $page = 1, int $perPage = 10): array {
-        $total = $this->repository->countCases($filters);
-        $items = $this->repository->listCasesPaged($filters, $page, $perPage);
-
-        return [
-            'items' => $items,
-            'total' => $total,
-            'page' => max(1, $page),
-            'per_page' => max(1, min(100, $perPage)),
-            'total_pages' => (int) max(1, ceil($total / max(1, $perPage))),
-        ];
-    }
-
-    
-    public function getDashboardTrends(): array {
-        return [
-            'quarterly_by_category' => $this->repository->getQuarterlyCategoryTrends(),
-            'status_totals'         => $this->repository->getStatusTotals(),
-            'category_frequency'    => $this->repository->getCategoryFrequencySummary(),
-        ];
-    }
-
-    
     public function processScheduledNotifications(): array {
         
         $pruned = $this->repository->pruneOldAuditLogs(1825);
@@ -141,42 +118,6 @@ class FeedbackService {
         return $result;
     }
 
-    
-    public function updateCaseForHr(string $reference, array $updateData, string $hrUserId): array {
-        $report = $this->repository->findByReference($reference);
-        
-        if (!$report) {
-            throw new \RuntimeException('Feedback case not found', 404);
-        }
-
-        
-        if ($updateData['status'] === 'Investigation completed' && empty($updateData['outcome_comments'])) {
-            throw new \RuntimeException('Outcome comments required when marking as completed', 400);
-        }
-
-        
-        if ($updateData['acknowledge'] ?? false) {
-            $updateData['acknowledged_at'] = date('Y-m-d H:i:s');
-            unset($updateData['acknowledge']);
-        } else {
-            unset($updateData['acknowledge']);
-        }
-
-        
-        $this->repository->updateReport($reference, $updateData, $hrUserId);
-        
-        
-        $details = json_encode($updateData);
-        $this->repository->logAudit("hr:{$hrUserId}", 'case_updated', $reference, $details, $hrUserId);
-        
-        return [
-            'success' => true,
-            'reference' => $reference,
-            'message' => 'Case updated successfully'
-        ];
-    }
-
-    
     public function storeAttachments(string $feedbackId, ?string $updateId, array $files): array {
         $stored = [];
         $allowed = [

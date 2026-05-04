@@ -29,16 +29,6 @@ class FeedbackRepository {
         return $statusId;
     }
 
-    private function getStatusIdByName(string $name): string {
-        $stmt = $this->pdo->prepare('SELECT id FROM statuses WHERE name = ? LIMIT 1');
-        $stmt->execute([$name]);
-        $statusId = (string) ($stmt->fetchColumn() ?: '');
-        if ($statusId === '') {
-            throw new \RuntimeException('Invalid status selected', 422);
-        }
-        return $statusId;
-    }
-
     private function getDefaultStageId(): string {
         $stmt = $this->pdo->query(
             "SELECT id FROM stages WHERE name = 'Logged' AND is_active = 1 LIMIT 1"
@@ -52,16 +42,6 @@ class FeedbackRepository {
         }
         if ($stageId === '') {
             throw new \RuntimeException('No active stages configured', 500);
-        }
-        return $stageId;
-    }
-
-    private function getStageIdByName(string $name): string {
-        $stmt = $this->pdo->prepare('SELECT id FROM stages WHERE name = ? LIMIT 1');
-        $stmt->execute([$name]);
-        $stageId = (string) ($stmt->fetchColumn() ?: '');
-        if ($stageId === '') {
-            throw new \RuntimeException('Invalid stage selected', 422);
         }
         return $stageId;
     }
@@ -132,153 +112,6 @@ class FeedbackRepository {
             'attachments' => $this->getReportAttachments((string) $report['id']),
             'audit'       => $this->getReportAudit($reference),
         ];
-    }
-
-    private function buildCaseWhereClause(array $filters, array &$params): string {
-        $where = ' WHERE 1=1';
-
-        if (!empty($filters['reference_no'])) {
-            $where .= ' AND r.reference_no LIKE ?';
-            $params[] = '%' . $filters['reference_no'] . '%';
-        }
-
-        if (!empty($filters['category'])) {
-            $where .= ' AND c.name = ?';
-            $params[] = $filters['category'];
-        }
-
-        if (!empty($filters['status'])) {
-            $where .= ' AND s.name = ?';
-            $params[] = $filters['status'];
-        }
-
-        if (!empty($filters['date'])) {
-            $where .= ' AND DATE(r.created_at) = ?';
-            $params[] = $filters['date'];
-        }
-
-        return $where;
-    }
-
-    
-    public function listCases(array $filters = []): array {
-        $params = [];
-        $query = 'SELECT r.*, s.name AS status,
-                         COALESCE(r.category_other, c.name) AS category,
-                         st.name AS stage
-                  FROM feedbacks r
-                  LEFT JOIN statuses s   ON s.id  = r.status_id
-                  LEFT JOIN categories c ON c.id  = r.category_id
-                  LEFT JOIN stages st    ON st.id = r.stage_id';
-        $query .= $this->buildCaseWhereClause($filters, $params);
-
-        $allowedSortBy = ['created_at', 'category', 'status', 'stage', 'reference_no', 'priority'];
-        $sortBy = in_array($filters['sort_by'] ?? 'created_at', $allowedSortBy, true)
-            ? (string) $filters['sort_by']
-            : 'created_at';
-        $sortOrder = strtoupper((string) ($filters['sort_order'] ?? 'DESC')) === 'ASC' ? 'ASC' : 'DESC';
-
-        $sortColumnMap = [
-            'created_at'   => 'r.created_at',
-            'category'     => 'c.name',
-            'status'       => 's.name',
-            'stage'        => 'st.name',
-            'reference_no' => 'r.reference_no',
-            'priority'     => 'r.priority',
-        ];
-        $query .= ' ORDER BY ' . ($sortColumnMap[$sortBy] ?? 'r.created_at') . ' ' . $sortOrder;
-
-        $stmt = $this->pdo->prepare($query);
-        $stmt->execute($params);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    public function countCases(array $filters = []): int {
-        $params = [];
-        $query = 'SELECT COUNT(*)
-                  FROM feedbacks r
-                  LEFT JOIN statuses s   ON s.id  = r.status_id
-                  LEFT JOIN categories c ON c.id  = r.category_id
-                  LEFT JOIN stages st    ON st.id = r.stage_id';
-        $query .= $this->buildCaseWhereClause($filters, $params);
-
-        $stmt = $this->pdo->prepare($query);
-        $stmt->execute($params);
-        return (int) ($stmt->fetchColumn() ?: 0);
-    }
-
-    public function listCasesPaged(array $filters = [], int $page = 1, int $perPage = 10): array {
-        $page    = max(1, $page);
-        $perPage = max(1, min(100, $perPage));
-        $offset  = ($page - 1) * $perPage;
-
-        $params = [];
-        $query = 'SELECT r.*, s.name AS status,
-                         COALESCE(r.category_other, c.name) AS category,
-                         st.name AS stage
-                  FROM feedbacks r
-                  LEFT JOIN statuses s   ON s.id  = r.status_id
-                  LEFT JOIN categories c ON c.id  = r.category_id
-                  LEFT JOIN stages st    ON st.id = r.stage_id';
-        $query .= $this->buildCaseWhereClause($filters, $params);
-
-        $allowedSortBy = ['created_at', 'category', 'status', 'stage', 'reference_no', 'priority'];
-        $sortBy = in_array($filters['sort_by'] ?? 'created_at', $allowedSortBy, true)
-            ? (string) $filters['sort_by']
-            : 'created_at';
-        $sortOrder = strtoupper((string) ($filters['sort_order'] ?? 'DESC')) === 'ASC' ? 'ASC' : 'DESC';
-
-        $sortColumnMap = [
-            'created_at'   => 'r.created_at',
-            'category'     => 'c.name',
-            'status'       => 's.name',
-            'stage'        => 'st.name',
-            'reference_no' => 'r.reference_no',
-            'priority'     => 'r.priority',
-        ];
-        $query .= ' ORDER BY ' . ($sortColumnMap[$sortBy] ?? 'r.created_at') . ' ' . $sortOrder;
-        $query .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) $offset;
-
-        $stmt = $this->pdo->prepare($query);
-        $stmt->execute($params);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    
-    public function updateReport(string $reference, array $data, ?string $updatedByUserId = null): bool {
-        $allowed = ['priority', 'stage', 'status', 'anonymized_summary', 'action_taken',
-                    'outcome_comments', 'internal_notes', 'acknowledged_at'];
-
-        $updates = [];
-        $params  = [];
-
-        foreach ($data as $key => $value) {
-            if (in_array($key, $allowed)) {
-                if ($key === 'status') {
-                    $updates[] = 'status_id = ?';
-                    $params[]  = $this->getStatusIdByName((string) $value);
-                } elseif ($key === 'stage') {
-                    $updates[] = 'stage_id = ?';
-                    $params[]  = $this->getStageIdByName((string) $value);
-                } else {
-                    $updates[] = "$key = ?";
-                    $params[]  = $value;
-                }
-            }
-        }
-
-        if (empty($updates)) {
-            return false;
-        }
-
-        $updates[] = 'updated_by_user_id = ?';
-        $params[] = $updatedByUserId;
-
-        $params[] = $reference;
-        $query = 'UPDATE feedbacks SET ' . implode(', ', $updates) . ', updated_at = NOW() WHERE reference_no = ?';
-
-        $stmt = $this->pdo->prepare($query);
-        return $stmt->execute($params);
     }
 
     
@@ -401,48 +234,6 @@ class FeedbackRepository {
         );
 
         $stmt->execute([$hours, $kind]);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    
-    public function getQuarterlyCategoryTrends(): array {
-        $stmt = $this->pdo->query(
-            'SELECT YEAR(r.created_at) AS year_no,
-                    QUARTER(r.created_at) AS quarter_no,
-                    c.name AS category,
-                    COUNT(*) AS total_cases
-             FROM feedbacks r
-             LEFT JOIN categories c ON c.id = r.category_id
-             GROUP BY YEAR(r.created_at), QUARTER(r.created_at), c.name
-             ORDER BY year_no DESC, quarter_no DESC, c.name ASC'
-        );
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    
-    public function getStatusTotals(): array {
-        $stmt = $this->pdo->query(
-            'SELECT s.name AS status, COUNT(*) AS total
-             FROM feedbacks r
-             LEFT JOIN statuses s ON s.id = r.status_id
-             GROUP BY s.name
-             ORDER BY total DESC'
-        );
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    
-    public function getCategoryFrequencySummary(): array {
-        $stmt = $this->pdo->query(
-            'SELECT c.name AS category,
-                    COUNT(*) AS total_cases,
-                    SUM(CASE WHEN s.name NOT LIKE \'%completed%\' THEN 1 ELSE 0 END) AS open_cases
-             FROM feedbacks r
-             LEFT JOIN statuses s ON s.id = r.status_id
-             LEFT JOIN categories c ON c.id = r.category_id
-             GROUP BY c.name
-             ORDER BY open_cases DESC, total_cases DESC'
-        );
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }

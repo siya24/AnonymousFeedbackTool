@@ -21,20 +21,4 @@ final class StatusApiController
     {
         Response::json(['data' => $this->statusRepository->getActive()]);
     }
-
-    
-    public function getById(array $params): void
-    {
-        $id = trim((string) ($params['id'] ?? ''));
-        if ($id === '') {
-            Response::json(['error' => 'Invalid status ID'], 400);
-        }
-
-        $status = $this->statusRepository->findById($id);
-        if (!$status || (int) ($status['is_active'] ?? 0) !== 1) {
-            Response::json(['error' => 'Status not found'], 404);
-        }
-
-        Response::json(['data' => $status]);
-    }
 }
