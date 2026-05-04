@@ -125,8 +125,8 @@ final class FeedbackApiController
     
     public function downloadAttachment(array $params): void
     {
-        $id = (int) ($params['id'] ?? 0);
-        if ($id <= 0) {
+        $id = trim((string) ($params['id'] ?? ''));
+        if ($id === '') {
             Response::json(['error' => 'Invalid attachment ID'], 400);
         }
 
@@ -137,7 +137,41 @@ final class FeedbackApiController
             Response::json(['error' => 'Attachment not found'], 404);
         }
 
-        $uploadPath = __DIR__ . '/../../../uploads/' . basename($attachment['stored_name']);
+        // Allow access if the request carries a valid HR JWT token
+        $auth = \App\Core\Container::get('auth');
+        $isAuthenticated = $auth->authenticate() && $auth->isAuthenticated();
+
+        if (!$isAuthenticated) {
+            // Allow anonymous access only when the caller provides the correct reference_no
+            $referenceNo = strtoupper(trim((string) (\App\Core\Request::query('reference_no') ?? '')));
+            if ($referenceNo === '') {
+                Response::json(['error' => 'Authentication required to download attachments'], 401);
+            }
+
+            // Verify the attachment belongs to the supplied reference number
+            $db = \App\Core\Container::get('db');
+            $stmt = $db->prepare(
+                'SELECT f.id FROM feedbacks f
+                 LEFT JOIN attachments a ON a.feedback_id = f.id
+                 LEFT JOIN report_updates ru ON a.report_update_id = ru.id
+                 LEFT JOIN feedbacks f2 ON ru.feedback_id = f2.id
+                 WHERE f.reference_no = ? AND (a.id = ? OR (a.report_update_id IS NOT NULL AND f2.reference_no = ?))
+                 LIMIT 1'
+            );
+            $stmt->execute([$referenceNo, $id, $referenceNo]);
+            if (!$stmt->fetchColumn()) {
+                Response::json(['error' => 'Access denied'], 403);
+            }
+        }
+
+        $config = \App\Core\Container::get('config');
+        $storageDir = trim((string) ($config['app']['attachments_storage_path'] ?? ''));
+        if ($storageDir === '') {
+            $storageDir = dirname(__DIR__, 4) . DIRECTORY_SEPARATOR . 'anonymous_feedback_private_uploads';
+        }
+        $storageDir = rtrim($storageDir, "\\/");
+
+        $uploadPath = $storageDir . DIRECTORY_SEPARATOR . basename((string) $attachment['stored_name']);
         if (!file_exists($uploadPath)) {
             Response::json(['error' => 'File not found on server'], 404);
         }

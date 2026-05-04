@@ -269,7 +269,7 @@ function initPublicForms() {
                 lookupOut.classList.remove('d-none');
                 const statusBadgeClass = data.status === 'Resolved' ? 'bg-success' : data.status === 'Investigation pending' ? 'bg-warning text-dark' : 'bg-secondary';
                 const updates = (data.updates || []).map(u => `<li class="list-group-item"><small class="text-muted">${escHtml(u.created_at || '')}</small><br>${escHtml(u.update_text || '')}</li>`).join('');
-                const attachments = (data.attachments || []).map(a => `<li class="list-group-item"><a href="/api/attachments/${encodeURIComponent(a.id)}" download="${escHtml(a.original_name)}"><i class="fas fa-paperclip me-1"></i>${escHtml(a.original_name)}</a></li>`).join('');
+                const attachments = (data.attachments || []).map(a => `<li class="list-group-item"><a href="/api/attachments/${encodeURIComponent(a.id)}?reference_no=${encodeURIComponent(data.reference_no || '')}" download="${escHtml(a.original_name)}"><i class="fas fa-paperclip me-1"></i>${escHtml(a.original_name)}</a></li>`).join('');
                 lookupOut.innerHTML = `
                   <div class="card border-0 shadow-sm">
                     <div class="card-body">
@@ -294,41 +294,6 @@ function initPublicForms() {
                 showNotification(err.message, 'danger');
             }
         });
-    }
-
-    const reportFilter = byId('public-report-filter');
-    const reportTable = byId('public-report-table');
-    const reportingTab = byId('tab-reporting');
-    if (reportFilter) {
-        const load = async () => {
-            const params = new URLSearchParams(new FormData(reportFilter));
-            const data = await api(`${API_BASE}/reports?${params.toString()}`);
-            reportTable.innerHTML = renderTable(data.data || []);
-        };
-
-        reportFilter.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            try {
-                await load();
-            } catch (err) {
-                reportTable.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${err.message}</div>`;
-            }
-        });
-
-        load().catch(() => {
-            reportTable.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-circle me-2"></i>Could not load reports.</div>';
-        });
-
-        setInterval(() => {
-            const isVisible = reportingTab?.classList.contains('active') || reportingTab?.classList.contains('show');
-            if (!isVisible) {
-                return;
-            }
-
-            load().catch(() => {
-                reportTable.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-circle me-2"></i>Could not refresh reports.</div>';
-            });
-        }, 30000);
     }
 }
 
@@ -487,6 +452,18 @@ function initHrPage() {
         }
     });
 
+    // Handle Clear Filters button
+    const clearBtn = filterForm?.querySelector('[type="reset"]');
+    clearBtn?.addEventListener('click', async () => {
+        filterForm.reset();
+        currentPage = 1;
+        try {
+            await loadCases();
+        } catch (err) {
+            casesTable.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${err.message}</div>`;
+        }
+    });
+
     if (TokenManager.hasToken()) {
         Promise.all([loadFilterOptions(), loadCases()]).catch((err) => {
             casesTable.innerHTML = `<div class="alert alert-warning"><i class="fas fa-exclamation-circle me-2"></i>${err.message}</div>`;
@@ -504,6 +481,7 @@ function initHrCasePage() {
     const summary = byId('hr-case-summary');
     const updateForm = byId('hr-update-form');
     const statusSelect = byId('status');
+    const stageSelect = byId('stage');
     const reference = (casePage.dataset.reference || '').trim();
 
     if (!TokenManager.hasToken()) {
@@ -517,7 +495,9 @@ function initHrCasePage() {
         }
 
         updateForm.priority.value = report.priority || 'Normal';
-        updateForm.stage.value = report.stage || 'Logged';
+        if (stageSelect) {
+            stageSelect.value = report.stage || 'Logged';
+        }
         updateForm.status.value = report.status || 'Investigation pending';
         updateForm.anonymized_summary.value = report.anonymized_summary || '';
         updateForm.action_taken.value = report.action_taken || '';
@@ -561,6 +541,14 @@ function initHrCasePage() {
         }
     };
 
+    const loadStages = async () => {
+        const data = await api(`${API_BASE}/stages`);
+        const opts = (data.data || []).map((s) => `<option value="${escHtml(s.name)}">${escHtml(s.name)}</option>`).join('');
+        if (stageSelect) {
+            stageSelect.innerHTML = opts;
+        }
+    };
+
 
 
     updateForm?.addEventListener('submit', async (e) => {
@@ -601,7 +589,7 @@ function initHrCasePage() {
 
     (async () => {
         try {
-            await loadStatuses();
+            await Promise.all([loadStatuses(), loadStages()]);
             await loadCase();
         } catch (err) {
             summary.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${err.message}</div>`;
@@ -650,6 +638,63 @@ function initHrDashboardPage() {
     loadDashboard().catch((err) => {
         output.classList.remove('d-none');
         output.textContent = err.message;
+    });
+}
+
+function initHrReportsPage() {
+    const reportsPage = byId('hr-reports-page');
+    if (!reportsPage) {
+        return;
+    }
+
+    const reportFilter = byId('hr-report-filter');
+    const reportTable = byId('hr-report-table');
+    const reportOutput = byId('hr-report-output');
+    const categoryFilter = byId('report-category');
+    const statusFilter = byId('report-status');
+
+    const loadFilters = async () => {
+        try {
+            const [catData, statusData] = await Promise.all([
+                api(`${API_BASE}/categories`),
+                api(`${API_BASE}/statuses`)
+            ]);
+            const catOpts = (catData.data || []).map(c => `<option value="${escHtml(c.name)}">${escHtml(c.name)}</option>`).join('');
+            const statusOpts = (statusData.data || []).map(s => `<option value="${escHtml(s.name)}">${escHtml(s.name)}</option>`).join('');
+            if (categoryFilter) categoryFilter.innerHTML = '<option value="">Any category</option>' + catOpts;
+            if (statusFilter) statusFilter.innerHTML = '<option value="">Any status</option>' + statusOpts;
+        } catch (err) {
+            console.error('Failed to load filters:', err);
+        }
+    };
+
+    const loadReports = async () => {
+        try {
+            const params = new URLSearchParams(new FormData(reportFilter));
+            const data = await api(`${API_BASE}/reports?${params.toString()}`);
+            reportTable.innerHTML = renderTable(data.data || []);
+            reportOutput.classList.add('d-none');
+        } catch (err) {
+            reportTable.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${err.message}</div>`;
+            reportOutput.classList.remove('d-none');
+            reportOutput.textContent = err.message;
+        }
+    };
+
+    reportFilter?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await loadReports();
+    });
+
+    // Handle Clear Filters button
+    const clearHrReportsBtn = reportFilter?.querySelector('[type="reset"]');
+    clearHrReportsBtn?.addEventListener('click', async () => {
+        reportFilter.reset();
+        await loadReports();
+    });
+
+    Promise.all([loadFilters(), loadReports()]).catch((err) => {
+        reportTable.innerHTML = `<div class="alert alert-warning"><i class="fas fa-exclamation-circle me-2"></i>Failed to load reports: ${err.message}</div>`;
     });
 }
 
@@ -1065,6 +1110,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initPublicForms();
     initHrPage();
     initHrCasePage();
+    initHrReportsPage();
     initHrDashboardPage();
     initHrCategories();
     initHrStatuses();

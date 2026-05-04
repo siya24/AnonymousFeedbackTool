@@ -8,8 +8,30 @@ use DateTime;
 class FeedbackService {
     public function __construct(
         private FeedbackRepository $repository,
-        private NotificationService $notificationService
-    ) {}
+        private NotificationService $notificationService,
+        private ?MalwareScannerInterface $malwareScanner = null,
+        private ?string $attachmentsStoragePath = null
+    ) {
+        $this->malwareScanner = $malwareScanner ?? new NoOpMalwareScanner();
+        $defaultStoragePath = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'anonymous_feedback_private_uploads';
+        $configuredPath = trim((string) ($this->attachmentsStoragePath ?? ''));
+        $this->attachmentsStoragePath = $configuredPath !== '' ? rtrim($configuredPath, "\\/") : $defaultStoragePath;
+    }
+
+    private function ensureAttachmentsDirectory(): string
+    {
+        $uploadDir = (string) $this->attachmentsStoragePath;
+        if (!is_dir($uploadDir) && !mkdir($uploadDir, 0750, true)) {
+            throw new \RuntimeException('Failed to initialize internal upload directory', 500);
+        }
+
+        $resolved = realpath($uploadDir);
+        if ($resolved === false) {
+            throw new \RuntimeException('Unable to resolve internal upload directory', 500);
+        }
+
+        return $resolved;
+    }
 
     
     public function generateReference(string $prefix = 'AF'): string {
@@ -170,13 +192,7 @@ class FeedbackService {
             'zip', 'rar', '7z'
         ];
         $maxSize = 25 * 1024 * 1024;
-        $uploadDir = realpath(__DIR__ . '/../../uploads');
-        if ($uploadDir === false) {
-            $uploadDir = __DIR__ . '/../../uploads';
-            if (!is_dir($uploadDir) && !mkdir($uploadDir, 0750, true)) {
-                throw new \RuntimeException('Failed to initialize internal upload directory', 500);
-            }
-        }
+        $uploadDir = $this->ensureAttachmentsDirectory();
 
         foreach ($files['name'] ?? [] as $index => $name) {
             $error = $files['error'][$index] ?? null;
@@ -244,6 +260,26 @@ class FeedbackService {
 
             if (!move_uploaded_file($tmpName, $uploadPath)) {
                 throw new \RuntimeException("Failed to store file {$name}", 500);
+            }
+
+            // Scan file for malware
+            try {
+                if (!$this->malwareScanner->scan($uploadPath)) {
+                    // Malware detected, delete the file
+                    @unlink($uploadPath);
+                    throw new \RuntimeException(
+                        "File {$name} failed malware scan and was rejected. Contact support if you believe this is an error.",
+                        422
+                    );
+                }
+            } catch (\RuntimeException $e) {
+                // If it's our malware detection error, re-throw it
+                if ($e->getCode() === 422) {
+                    throw $e;
+                }
+                // For other scanner errors (network, etc), log but allow file to proceed
+                // In production, consider being stricter
+                error_log("Malware scan warning for {$name}: " . $e->getMessage());
             }
 
             $mimeType = $mimeMap[$ext][0] ?? 'application/octet-stream';

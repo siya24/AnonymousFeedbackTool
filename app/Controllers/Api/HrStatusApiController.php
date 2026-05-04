@@ -32,7 +32,7 @@ final class HrStatusApiController
     {
         try {
             $this->auth->authenticate();
-            $this->auth->requireRole(Authorization::ROLE_HR);
+            $this->auth->requireAnyRole(Authorization::CONFIG_ROLES);
             Response::json(['data' => $this->statusRepository->getAll()]);
         } catch (\RuntimeException $e) {
             $code = (int) ($e->getCode() ?: 400);
@@ -44,7 +44,7 @@ final class HrStatusApiController
     {
         try {
             $this->auth->authenticate();
-            $this->auth->requireRole(Authorization::ROLE_HR);
+            $this->auth->requireAnyRole(Authorization::CONFIG_ROLES);
 
             $id = trim((string) ($params['id'] ?? ''));
             if ($id === '') {
@@ -67,7 +67,7 @@ final class HrStatusApiController
     {
         try {
             $this->auth->authenticate();
-            $this->auth->requireRole(Authorization::ROLE_HR);
+            $this->auth->requireAnyRole(Authorization::CONFIG_ROLES);
 
             $input = Request::input();
             $name = trim((string) ($input['name'] ?? ''));
@@ -104,7 +104,7 @@ final class HrStatusApiController
     {
         try {
             $this->auth->authenticate();
-            $this->auth->requireRole(Authorization::ROLE_HR);
+            $this->auth->requireAnyRole(Authorization::CONFIG_ROLES);
 
             $id = trim((string) ($params['id'] ?? ''));
             $input = Request::input();
@@ -150,7 +150,7 @@ final class HrStatusApiController
     {
         try {
             $this->auth->authenticate();
-            $this->auth->requireRole(Authorization::ROLE_HR);
+            $this->auth->requireAnyRole(Authorization::CONFIG_ROLES);
 
             $id = trim((string) ($params['id'] ?? ''));
             if ($id === '') {

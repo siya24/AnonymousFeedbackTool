@@ -4,6 +4,7 @@ declare(strict_types=1);
 return [
     'name' => getenv('APP_NAME') ?: 'Anonymous Feedback Tool',
     'base_url' => getenv('APP_BASE_URL') ?: 'http://localhost:8000',
+    'attachments_storage_path' => getenv('ATTACHMENTS_STORAGE_PATH') ?: (dirname(__DIR__) . '/../anonymous_feedback_private_uploads'),
     'hr_auth_mode' => getenv('HR_AUTH_MODE') ?: 'hybrid',
     'ldap_host' => getenv('LDAP_HOST') ?: 'localhost',
     'ldap_port' => (int) (getenv('LDAP_PORT') ?: 389),
@@ -30,4 +31,5 @@ return [
     'ethics_notification_email' => getenv('ETHICS_NOTIFICATION_EMAIL') ?: '',
     'notifications_immediate_enabled' => filter_var(getenv('NOTIFICATIONS_IMMEDIATE_ENABLED') ?: 'true', FILTER_VALIDATE_BOOLEAN),
     'notifications_scheduled_enabled' => filter_var(getenv('NOTIFICATIONS_SCHEDULED_ENABLED') ?: 'true', FILTER_VALIDATE_BOOLEAN),
+    'malware_scanner' => getenv('MALWARE_SCANNER') ?: 'noop',
 ];

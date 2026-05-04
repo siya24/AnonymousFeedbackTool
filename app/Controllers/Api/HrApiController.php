@@ -93,10 +93,12 @@ final class HrApiController
 
     private function authenticateLocal(string $email, string $password): ?array
     {
+        $placeholders = implode(',', array_fill(0, count(Authorization::CONSOLE_ROLES), '?'));
         $stmt = $this->db->prepare(
-            'SELECT id, name, email, password_hash, role FROM users WHERE email = ? AND role = ? AND is_active = 1'
+            "SELECT id, name, email, password_hash, role FROM users
+             WHERE email = ? AND role IN ({$placeholders}) AND is_active = 1"
         );
-        $stmt->execute([$email, Authorization::ROLE_HR]);
+        $stmt->execute([$email, ...Authorization::CONSOLE_ROLES]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$user || !password_verify($password, $user['password_hash'])) {
@@ -187,10 +189,12 @@ final class HrApiController
         $emailCandidates = array_values(array_unique($emailCandidates));
 
         foreach ($emailCandidates as $candidate) {
+            $placeholders = implode(',', array_fill(0, count(Authorization::CONSOLE_ROLES), '?'));
             $stmt = $this->db->prepare(
-                'SELECT id, name, email, password_hash, role FROM users WHERE email = ? AND role = ? AND is_active = 1'
+                "SELECT id, name, email, password_hash, role FROM users
+                 WHERE email = ? AND role IN ({$placeholders}) AND is_active = 1"
             );
-            $stmt->execute([$candidate, Authorization::ROLE_HR]);
+            $stmt->execute([$candidate, ...Authorization::CONSOLE_ROLES]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($user) {
@@ -394,7 +398,7 @@ final class HrApiController
         try {
             
             $this->auth->authenticate();
-            $this->auth->requireRole(Authorization::ROLE_HR);
+            $this->auth->requireAnyRole(Authorization::CONSOLE_ROLES);
 
             $filters = [
                 'reference_no' => Request::query('reference_no'),
@@ -430,7 +434,7 @@ final class HrApiController
         try {
             
             $this->auth->authenticate();
-            $this->auth->requireRole(Authorization::ROLE_HR);
+            $this->auth->requireAnyRole(Authorization::CONSOLE_ROLES);
 
             $reference = strtoupper(trim((string) ($params['reference'] ?? '')));
             
@@ -452,7 +456,7 @@ final class HrApiController
         try {
             
             $this->auth->authenticate();
-            $this->auth->requireRole(Authorization::ROLE_HR);
+            $this->auth->requireAnyRole(Authorization::CASE_WRITE_ROLES);
 
             $reference = strtoupper(trim((string) ($params['reference'] ?? '')));
             $payload = Request::input();
@@ -500,7 +504,7 @@ final class HrApiController
     {
         try {
             $this->auth->authenticate();
-            $this->auth->requireRole(Authorization::ROLE_HR);
+            $this->auth->requireAnyRole(Authorization::CONSOLE_ROLES);
 
             $data = $this->feedbackService->getDashboardTrends();
             Response::json(['data' => $data]);

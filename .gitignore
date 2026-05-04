@@ -45,3 +45,10 @@ uploads/*
 # Temporary extraction folder
 .tmp_req/
 login_test.ps1
+
+# Local generated docs/artifacts
+.tmp_flowchart.html
+doc_json.txt
+doc_output.txt
+doc_paragraphs.txt
+TECHNICAL_DESIGN.updated*.docx

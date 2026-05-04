@@ -3,8 +3,19 @@
 namespace App\Core;
 
 class Authorization {
-    public const ROLE_HR = 'hr';
-    public const ROLE_ETHICS = 'ethics';
+    public const ROLE_HR      = 'hr';
+    public const ROLE_ETHICS  = 'ethics';
+    public const ROLE_MANAGER = 'manager';
+    public const ROLE_OFFICER = 'officer';
+
+    /** Roles that may access the HR console at all */
+    public const CONSOLE_ROLES = [self::ROLE_HR, self::ROLE_ETHICS, self::ROLE_MANAGER, self::ROLE_OFFICER];
+
+    /** Roles permitted to create/update cases */
+    public const CASE_WRITE_ROLES = [self::ROLE_HR, self::ROLE_ETHICS, self::ROLE_OFFICER];
+
+    /** Roles permitted to manage system configuration (categories, statuses, stages) */
+    public const CONFIG_ROLES = [self::ROLE_HR, self::ROLE_OFFICER];
     
     private ?array $user = null;
 

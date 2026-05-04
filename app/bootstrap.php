@@ -100,9 +100,20 @@ App\Core\Container::set('notificationService', new App\Services\NotificationServ
     (bool) ($config['app']['notifications_immediate_enabled'] ?? true),
     (bool) ($config['app']['notifications_scheduled_enabled'] ?? true),
 ));
+
+// Malware scanner: use ClamAV if available, otherwise no-op
+$scannerMode = strtolower((string) ($config['app']['malware_scanner'] ?? 'noop'));
+if ($scannerMode === 'clamav') {
+    App\Core\Container::set('malwareScanner', new App\Services\ClamAvMalwareScanner());
+} else {
+    App\Core\Container::set('malwareScanner', new App\Services\NoOpMalwareScanner());
+}
+
 App\Core\Container::set('feedbackService', new App\Services\FeedbackService(
     App\Core\Container::get('feedbackRepository'),
-    App\Core\Container::get('notificationService')
+    App\Core\Container::get('notificationService'),
+    App\Core\Container::get('malwareScanner'),
+    $config['app']['attachments_storage_path'] ?? null
 ));
 
 

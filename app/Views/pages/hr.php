@@ -5,6 +5,9 @@
             <a href="/hr/dashboard" class="btn btn-outline-primary">
                 <i class="fas fa-chart-line me-1"></i>Open Dashboard
             </a>
+            <a href="/anonymized/reports" class="btn btn-outline-info">
+                <i class="fas fa-chart-bar me-1"></i>Case Reports
+            </a>
             <a href="/hr/categories" class="btn btn-outline-secondary">
                 <i class="fas fa-tags me-1"></i>Categories
             </a>
@@ -82,9 +85,12 @@
                             <option value="ASC">Asc</option>
                         </select>
                     </div>
-                    <div class="col-md-12 d-grid d-md-flex justify-content-md-end">
+                    <div class="col-md-12 d-grid d-md-flex justify-content-md-end gap-2">
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-search me-1"></i>Apply Filter
+                        </button>
+                        <button type="reset" class="btn btn-secondary">
+                            <i class="fas fa-redo me-1"></i>Clear Filters
                         </button>
                     </div>
                 </form>
@@ -100,6 +106,7 @@
                 <div id="hr-cases-pagination" class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2"></div>
             </div>
         </div>
+
     </div>
 
     <pre id="hr-output" class="output mt-3 d-none"></pre>

@@ -42,7 +42,9 @@
 
                 <div class="mb-3">
                     <label for="stage" class="form-label"><i class="fas fa-tasks me-1"></i>Stage</label>
-                    <input id="stage" type="text" name="stage" class="form-control" value="Logged">
+                    <select id="stage" name="stage" class="form-select">
+                        <option value="">Loading stages...</option>
+                    </select>
                 </div>
 
                 <div class="mb-3">

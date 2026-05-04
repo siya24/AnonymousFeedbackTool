@@ -89,36 +89,6 @@
                 </div>
             </div>
         </div>
-
-        <div id="tab-reporting" class="tab-pane fade" role="tabpanel">
-            <form id="public-report-filter" class="mt-3 mb-4 p-3" style="background-color: #f8f9fa; border-radius: 8px;">
-                <h5><i class="fas fa-filter me-2"></i>Search Reports</h5>
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <input type="text" name="reference_no" class="form-control" placeholder="Reference number">
-                    </div>
-                    <div class="col-md-6">
-                        <select id="report-filter-category" name="category" class="form-select">
-                            <option value="">Any category</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6">
-                        <select id="report-filter-status" name="status" class="form-select">
-                            <option value="">Any status</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6">
-                        <input type="date" name="date" class="form-control">
-                    </div>
-                    <div class="col-12">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-search me-1"></i>Search
-                        </button>
-                    </div>
-                </div>
-            </form>
-            <div id="public-report-table"></div>
-        </div>
     </div>
 
     <pre id="global-output" class="output d-none mt-3"></pre>

@@ -31,6 +31,11 @@ final class PageController
         Response::view('pages/hr_dashboard', ['title' => 'HR Dashboard']);
     }
 
+    public function hrReports(array $params = []): void
+    {
+        Response::view('pages/hr_reports', ['title' => 'Case Reports']);
+    }
+
     public function hrCategories(array $params = []): void
     {
         Response::view('pages/hr_categories', ['title' => 'Manage Categories']);
