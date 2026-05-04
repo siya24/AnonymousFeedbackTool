@@ -1,6 +1,14 @@
 <?php
 declare(strict_types=1);
 
+// When using the PHP built-in dev server, serve static files directly.
+if (PHP_SAPI === 'cli-server') {
+    $staticFile = __DIR__ . parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+    if (is_file($staticFile)) {
+        return false;
+    }
+}
+
 use App\Controllers\Api\FeedbackApiController;
 use App\Controllers\Api\CategoryApiController;
 use App\Controllers\Api\StatusApiController;
@@ -116,6 +124,17 @@ function isIntranetOrVpnClient(): bool
     return false;
 }
 
+function isLocalReportsBypassEnabled(): bool
+{
+    $enabled = filter_var(getenv('ALLOW_LOCAL_REPORTS') ?: 'false', FILTER_VALIDATE_BOOLEAN);
+    if (!$enabled) {
+        return false;
+    }
+
+    $ip = clientIpAddress();
+    return ($ip === '127.0.0.1' || $ip === '::1');
+}
+
 
 if (str_starts_with(\App\Core\Request::path(), '/uploads')) {
     http_response_code(403);
@@ -143,7 +162,7 @@ if (!$isFullMode && (
 
 $path = Request::path();
 $adProtected = ($path === '/anonymized/reports' || $path === '/api/reports');
-if ($adProtected && !(hasPassiveDomainIdentity() || isIntranetOrVpnClient())) {
+if ($adProtected && !(isLocalReportsBypassEnabled() || hasPassiveDomainIdentity() || isIntranetOrVpnClient())) {
     http_response_code(403);
     if (str_starts_with($path, '/api/')) {
         header('Content-Type: application/json; charset=utf-8');

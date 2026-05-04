@@ -5,6 +5,10 @@ This repository now contains two separate deployable apps:
 - `external/` - Public-facing anonymous reporting app
 - `internal/` - Intranet HR and reporting app
 
+Technical design (single source for both apps):
+
+- `TECHNICAL_DESIGN.md`
+
 ## Deployment Model
 
 ### External app (`external/`)

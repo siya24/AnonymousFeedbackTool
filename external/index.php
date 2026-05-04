@@ -1,6 +1,14 @@
 <?php
 declare(strict_types=1);
 
+// When using the PHP built-in dev server, serve static files directly.
+if (PHP_SAPI === 'cli-server') {
+    $staticFile = __DIR__ . parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+    if (is_file($staticFile)) {
+        return false;
+    }
+}
+
 use App\Controllers\Api\CategoryApiController;
 use App\Controllers\Api\FeedbackApiController;
 use App\Controllers\Api\StatusApiController;
