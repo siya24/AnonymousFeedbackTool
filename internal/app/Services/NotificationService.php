@@ -1,0 +1,220 @@
+<?php declare(strict_types=1);
+
+namespace App\Services;
+
+use App\Core\SmtpMailer;
+use App\Repositories\FeedbackRepository;
+use App\Services\EmailTemplateRenderer;
+
+class NotificationService
+{
+    public function __construct(
+        private FeedbackRepository $repository,
+        private SmtpMailer $mailer,
+        private EmailTemplateRenderer $templateRenderer,
+        private string $defaultHrEmail,
+        private string $defaultEthicsEmail,
+        private string $baseUrl = '',
+        private bool $immediateNotificationsEnabled = true,
+        private bool $scheduledNotificationsEnabled = true,
+    ) {
+        if (empty($this->baseUrl)) {
+            $configured = getenv('APP_BASE_URL');
+            $this->baseUrl = ($configured !== false && $configured !== '')
+                ? $configured
+                : self::detectBaseUrl();
+        }
+    }
+
+    private function isDisallowedRecipient(string $email): bool
+    {
+        $normalized = strtolower(trim($email));
+        if ($normalized === '' || !str_contains($normalized, '@')) {
+            return true;
+        }
+
+        $domain = substr(strrchr($normalized, '@') ?: '', 1);
+        $blockedDomains = ['organization.com', 'example.com', 'example.local'];
+        return in_array($domain, $blockedDomains, true);
+    }
+
+    
+    private function resolveRecipientsByRole(string $role, string $fallbackEmail): array
+    {
+        $recipients = $this->repository->getRecipientsByRole($role);
+        $recipients = array_values(array_filter(
+            $recipients,
+            fn(string $email): bool => !$this->isDisallowedRecipient($email)
+        ));
+
+        if (empty($recipients) && !$this->isDisallowedRecipient($fallbackEmail)) {
+            $recipients = [$fallbackEmail];
+        }
+
+        return array_values(array_unique($recipients));
+    }
+
+    
+    private function applyDevOverride(array $recipients): array
+    {
+        $override = getenv('DEV_NOTIFICATION_EMAIL');
+        if ($override !== false && $override !== '') {
+            return [$override];
+        }
+        return $recipients;
+    }
+
+    private static function detectBaseUrl(): string
+    {
+        
+        if (PHP_SAPI === 'cli') {
+            return 'http://localhost';
+        }
+
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $host   = $_SERVER['HTTP_HOST'] ?? ($_SERVER['SERVER_NAME'] ?? 'localhost');
+        $port   = (int) ($_SERVER['SERVER_PORT'] ?? 80);
+
+        
+        if (!str_contains((string) $host, ':')) {
+            if ($scheme === 'https' && $port !== 443) {
+                $host .= ':' . $port;
+            } elseif ($scheme === 'http' && $port !== 80) {
+                $host .= ':' . $port;
+            }
+        }
+
+        return $scheme . '://' . $host;
+    }
+
+    public function notifyNewFeedback(string $feedbackId, string $reference, string $category): void
+    {
+        if (!$this->immediateNotificationsEnabled) {
+            return;
+        }
+
+        $recipients = $this->resolveRecipientsByRole('hr', $this->defaultHrEmail);
+        if (empty($recipients)) {
+            return;
+        }
+        $caseUrl = $this->baseUrl . '/hr/cases/' . urlencode($reference);
+        $subject = "New anonymous feedback submitted ({$reference})";
+        $plain   = "A new anonymous feedback case has been submitted.\n\nReference: {$reference}\nCategory:  {$category}\n\nReview it here:\n{$caseUrl}";
+        $html = $this->templateRenderer->renderNotification([
+            'title' => 'New Feedback Submitted',
+            'badge' => 'NEW',
+            'badgeColor' => '#008AC4',
+            'reference' => $reference,
+            'category' => $category,
+            'message' => 'A new anonymous feedback case has been submitted and requires your attention.',
+            'caseUrl' => $caseUrl,
+            'ctaLabel' => 'View Case in HR Console',
+            'submittedAt' => '',
+        ]);
+        $recipients = $this->applyDevOverride($recipients);
+        foreach ($recipients as $recipient) {
+            $this->mailer->sendHtml($recipient, $subject, $html, $plain);
+            $this->repository->logNotification($feedbackId, 'new_feedback', $recipient);
+        }
+    }
+
+    public function notifyFollowUpSubmitted(string $feedbackId, string $reference, string $category): void
+    {
+        if (!$this->immediateNotificationsEnabled) {
+            return;
+        }
+
+        $recipients = $this->resolveRecipientsByRole('hr', $this->defaultHrEmail);
+        if (empty($recipients)) {
+            return;
+        }
+        $caseUrl = $this->baseUrl . '/hr/cases/' . urlencode($reference);
+        $subject = "Reporter follow-up received ({$reference})";
+        $plain   = "The reporter has submitted a follow-up update on case {$reference}.\n\nReference: {$reference}\nCategory:  {$category}\n\nReview it here:\n{$caseUrl}";
+        $html = $this->templateRenderer->renderNotification([
+            'title'       => 'Reporter Follow-up Received',
+            'badge'       => 'UPDATE',
+            'badgeColor'  => '#6f42c1',
+            'reference'   => $reference,
+            'category'    => $category,
+            'message'     => 'The reporter has submitted a follow-up update on their case. Please review.',
+            'caseUrl'     => $caseUrl,
+            'ctaLabel'    => 'View Case Update',
+            'submittedAt' => '',
+        ]);
+        $recipients = $this->applyDevOverride($recipients);
+        foreach ($recipients as $recipient) {
+            $this->mailer->sendHtml($recipient, $subject, $html, $plain);
+            $this->repository->logNotification($feedbackId, 'followup_notif', $recipient);
+        }
+    }
+
+    public function processScheduledNotifications(): array
+    {
+        if (!$this->scheduledNotificationsEnabled) {
+            return ['reminders_sent' => 0, 'escalations_sent' => 0];
+        }
+
+        $reminders   = 0;
+        $escalations = 0;
+
+        $pendingReminders = $this->repository->getUnacknowledgedReportsNeedingNotification(48, 'reminder_48h');
+        foreach ($pendingReminders as $report) {
+            $recipients = $this->resolveRecipientsByRole('hr', $this->defaultHrEmail);
+            if (empty($recipients)) {
+                continue;
+            }
+            $caseUrl = $this->baseUrl . '/hr/cases/' . urlencode($report['reference_no']);
+            $subject = "Reminder: feedback case not acknowledged ({$report['reference_no']})";
+            $plain   = "This case has not been acknowledged within 48 hours.\n\nReference: {$report['reference_no']}\nCategory:  {$report['category']}\nSubmitted: {$report['created_at']}\n\nReview it here:\n{$caseUrl}";
+            $html = $this->templateRenderer->renderNotification([
+                'title' => '48-Hour Reminder',
+                'badge' => 'REMINDER',
+                'badgeColor' => '#f0ad4e',
+                'reference' => (string) $report['reference_no'],
+                'category' => (string) $report['category'],
+                'message' => 'This feedback case has not been acknowledged within 48 hours. Please review it promptly.',
+                'caseUrl' => $caseUrl,
+                'ctaLabel' => 'Acknowledge Case',
+                'submittedAt' => (string) $report['created_at'],
+            ]);
+            $recipients = $this->applyDevOverride($recipients);
+            foreach ($recipients as $recipient) {
+                $this->mailer->sendHtml($recipient, $subject, $html, $plain);
+                $this->repository->logNotification((string) $report['id'], 'reminder_48h', $recipient);
+                $reminders++;
+            }
+        }
+
+        $pendingEscalations = $this->repository->getUnacknowledgedReportsNeedingNotification(72, 'escalation_72h');
+        foreach ($pendingEscalations as $report) {
+            $recipients = $this->resolveRecipientsByRole('ethics', $this->defaultEthicsEmail);
+            if (empty($recipients)) {
+                continue;
+            }
+            $caseUrl = $this->baseUrl . '/hr/cases/' . urlencode($report['reference_no']);
+            $subject = "Escalation: feedback case not acknowledged ({$report['reference_no']})";
+            $plain   = "This case has not been acknowledged within 72 hours and has been escalated.\n\nReference: {$report['reference_no']}\nCategory:  {$report['category']}\nSubmitted: {$report['created_at']}\n\nReview it here:\n{$caseUrl}";
+            $html = $this->templateRenderer->renderNotification([
+                'title' => '72-Hour Escalation',
+                'badge' => 'ESCALATED',
+                'badgeColor' => '#9d2722',
+                'reference' => (string) $report['reference_no'],
+                'category' => (string) $report['category'],
+                'message' => 'This feedback case has not been acknowledged within 72 hours and has been escalated to the Ethics Officer.',
+                'caseUrl' => $caseUrl,
+                'ctaLabel' => 'Review Escalated Case',
+                'submittedAt' => (string) $report['created_at'],
+            ]);
+            $recipients = $this->applyDevOverride($recipients);
+            foreach ($recipients as $recipient) {
+                $this->mailer->sendHtml($recipient, $subject, $html, $plain);
+                $this->repository->logNotification((string) $report['id'], 'escalation_72h', $recipient);
+                $escalations++;
+            }
+        }
+
+        return ['reminders_sent' => $reminders, 'escalations_sent' => $escalations];
+    }
+
+}

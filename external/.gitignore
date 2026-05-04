@@ -1,0 +1,54 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# PHP dependencies
+/vendor/
+/composer.phar
+
+# Logs and cache
+*.log
+*.cache
+/cache/
+/tmp/
+
+# IDE/editor settings
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# PHPUnit
+.phpunit.result.cache
+
+# Node (if frontend assets are added)
+node_modules/
+
+# Project documents kept locally
+Functional Requirements Document - Anonymous Feedback_V0.1.docx
+User Story Anonymous Feedback tool140925.docx
+
+# Runtime application data
+data/*.sqlite
+data/.app_key
+uploads/*
+!uploads/.gitkeep
+!data/.gitkeep
+
+# Temporary extraction folder
+.tmp_req/
+login_test.ps1
+
+# Local generated docs/artifacts
+.tmp_flowchart.html
+doc_json.txt
+doc_output.txt
+doc_paragraphs.txt
+TECHNICAL_DESIGN.updated*.docx
