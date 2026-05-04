@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 use App\Controllers\Api\CategoryApiController;
 use App\Controllers\Api\FeedbackApiController;
-use App\Controllers\Api\StageApiController;
 use App\Controllers\Api\StatusApiController;
 use App\Controllers\Web\PageController;
 use App\Core\Request;
@@ -43,9 +42,5 @@ $router->add('POST', '/api/feedback/update', [FeedbackApiController::class, 'sub
 $router->add('GET', '/api/feedback/{reference}', [FeedbackApiController::class, 'getByReference']);
 $router->add('GET', '/api/attachments/{id}', [FeedbackApiController::class, 'downloadAttachment']);
 $router->add('GET', '/api/categories', [CategoryApiController::class, 'listActive']);
-$router->add('GET', '/api/categories/{id}', [CategoryApiController::class, 'getById']);
 $router->add('GET', '/api/statuses', [StatusApiController::class, 'listActive']);
-$router->add('GET', '/api/statuses/{id}', [StatusApiController::class, 'getById']);
-$router->add('GET', '/api/stages', [StageApiController::class, 'listActive']);
-$router->add('GET', '/api/stages/{id}', [StageApiController::class, 'getById']);
 $router->dispatch(Request::method(), $path);

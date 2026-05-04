@@ -1107,7 +1107,6 @@ function initNavAuth() {
 
 document.addEventListener('DOMContentLoaded', () => {
     initNavAuth();
-    initPublicForms();
     initHrPage();
     initHrCasePage();
     initHrReportsPage();

@@ -158,54 +158,41 @@ if ($adProtected && !(hasPassiveDomainIdentity() || isIntranetOrVpnClient())) {
 $router = new Router();
 
 
-$router->add('GET', '/', [PageController::class, 'home']);
-$router->add('POST', '/api/feedback', [FeedbackApiController::class, 'submit']);
-$router->add('POST', '/api/feedback/update', [FeedbackApiController::class, 'submitUpdate']);
-$router->add('GET', '/api/feedback/{reference}', [FeedbackApiController::class, 'getByReference']);
+$router->add('GET', '/', [PageController::class, 'hr']);
 $router->add('GET', '/api/reports', [FeedbackApiController::class, 'publicReports']);
 $router->add('GET', '/api/attachments/{id}', [FeedbackApiController::class, 'downloadAttachment']);
 $router->add('GET', '/api/categories', [CategoryApiController::class, 'listActive']);
-$router->add('GET', '/api/categories/{id}', [CategoryApiController::class, 'getById']);
 $router->add('GET', '/api/statuses', [StatusApiController::class, 'listActive']);
-$router->add('GET', '/api/statuses/{id}', [StatusApiController::class, 'getById']);
 $router->add('GET', '/api/stages', [StageApiController::class, 'listActive']);
-$router->add('GET', '/api/stages/{id}', [StageApiController::class, 'getById']);
+$router->add('GET', '/hr', [PageController::class, 'hr']);
+$router->add('GET', '/hr/cases/{reference}', [PageController::class, 'hrCase']);
+$router->add('GET', '/hr/dashboard', [PageController::class, 'hrDashboard']);
+$router->add('GET', '/anonymized/reports', [PageController::class, 'hrReports']);
+$router->add('GET', '/hr/categories', [PageController::class, 'hrCategories']);
+$router->add('GET', '/hr/statuses', [PageController::class, 'hrStatuses']);
+$router->add('GET', '/hr/stages', [PageController::class, 'hrStages']);
 
-if ($isFullMode) {
-    
-    $router->add('GET', '/hr', [PageController::class, 'hr']);
-    $router->add('GET', '/hr/cases/{reference}', [PageController::class, 'hrCase']);
-    $router->add('GET', '/hr/dashboard', [PageController::class, 'hrDashboard']);
-    $router->add('GET', '/anonymized/reports', [PageController::class, 'hrReports']);
-    $router->add('GET', '/hr/categories', [PageController::class, 'hrCategories']);
-    $router->add('GET', '/hr/statuses', [PageController::class, 'hrStatuses']);
-    $router->add('GET', '/hr/stages', [PageController::class, 'hrStages']);
-    $router->add('GET', '/api/docs', [PageController::class, 'apiDocs']);
-    $router->add('GET', '/api/openapi.json', [PageController::class, 'openApiSpec']);
-
-    
-    $router->add('POST', '/api/hr/login', [HrApiController::class, 'login']);
-    $router->add('POST', '/api/hr/logout', [HrApiController::class, 'logout']);
-    $router->add('GET', '/api/hr/me', [HrApiController::class, 'getCurrentUser']);
-    $router->add('GET', '/api/hr/cases', [HrApiController::class, 'listCases']);
-    $router->add('GET', '/api/hr/cases/{reference}', [HrApiController::class, 'caseDetail']);
-    $router->add('POST', '/api/hr/cases/{reference}', [HrApiController::class, 'updateCase']);
-    $router->add('GET', '/api/hr/dashboard/trends', [HrApiController::class, 'dashboardTrends']);
-    $router->add('GET', '/api/hr/categories', [HrCategoryApiController::class, 'listAll']);
-    $router->add('GET', '/api/hr/categories/{id}', [HrCategoryApiController::class, 'getById']);
-    $router->add('POST', '/api/hr/categories', [HrCategoryApiController::class, 'create']);
-    $router->add('PUT', '/api/hr/categories/{id}', [HrCategoryApiController::class, 'update']);
-    $router->add('DELETE', '/api/hr/categories/{id}', [HrCategoryApiController::class, 'delete']);
-    $router->add('GET', '/api/hr/statuses', [HrStatusApiController::class, 'listAll']);
-    $router->add('GET', '/api/hr/statuses/{id}', [HrStatusApiController::class, 'getById']);
-    $router->add('POST', '/api/hr/statuses', [HrStatusApiController::class, 'create']);
-    $router->add('PUT', '/api/hr/statuses/{id}', [HrStatusApiController::class, 'update']);
-    $router->add('DELETE', '/api/hr/statuses/{id}', [HrStatusApiController::class, 'delete']);
-    $router->add('GET', '/api/hr/stages', [HrStageApiController::class, 'listAll']);
-    $router->add('GET', '/api/hr/stages/{id}', [HrStageApiController::class, 'getById']);
-    $router->add('POST', '/api/hr/stages', [HrStageApiController::class, 'create']);
-    $router->add('PUT', '/api/hr/stages/{id}', [HrStageApiController::class, 'update']);
-    $router->add('DELETE', '/api/hr/stages/{id}', [HrStageApiController::class, 'delete']);
-}
+$router->add('POST', '/api/hr/login', [HrApiController::class, 'login']);
+$router->add('POST', '/api/hr/logout', [HrApiController::class, 'logout']);
+$router->add('GET', '/api/hr/me', [HrApiController::class, 'getCurrentUser']);
+$router->add('GET', '/api/hr/cases', [HrApiController::class, 'listCases']);
+$router->add('GET', '/api/hr/cases/{reference}', [HrApiController::class, 'caseDetail']);
+$router->add('POST', '/api/hr/cases/{reference}', [HrApiController::class, 'updateCase']);
+$router->add('GET', '/api/hr/dashboard/trends', [HrApiController::class, 'dashboardTrends']);
+$router->add('GET', '/api/hr/categories', [HrCategoryApiController::class, 'listAll']);
+$router->add('GET', '/api/hr/categories/{id}', [HrCategoryApiController::class, 'getById']);
+$router->add('POST', '/api/hr/categories', [HrCategoryApiController::class, 'create']);
+$router->add('PUT', '/api/hr/categories/{id}', [HrCategoryApiController::class, 'update']);
+$router->add('DELETE', '/api/hr/categories/{id}', [HrCategoryApiController::class, 'delete']);
+$router->add('GET', '/api/hr/statuses', [HrStatusApiController::class, 'listAll']);
+$router->add('GET', '/api/hr/statuses/{id}', [HrStatusApiController::class, 'getById']);
+$router->add('POST', '/api/hr/statuses', [HrStatusApiController::class, 'create']);
+$router->add('PUT', '/api/hr/statuses/{id}', [HrStatusApiController::class, 'update']);
+$router->add('DELETE', '/api/hr/statuses/{id}', [HrStatusApiController::class, 'delete']);
+$router->add('GET', '/api/hr/stages', [HrStageApiController::class, 'listAll']);
+$router->add('GET', '/api/hr/stages/{id}', [HrStageApiController::class, 'getById']);
+$router->add('POST', '/api/hr/stages', [HrStageApiController::class, 'create']);
+$router->add('PUT', '/api/hr/stages/{id}', [HrStageApiController::class, 'update']);
+$router->add('DELETE', '/api/hr/stages/{id}', [HrStageApiController::class, 'delete']);
 
 $router->dispatch(Request::method(), Request::path());

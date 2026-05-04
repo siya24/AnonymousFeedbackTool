@@ -5,13 +5,13 @@
 ALTER TABLE users MODIFY COLUMN role ENUM('hr','ethics','manager','officer') NOT NULL DEFAULT 'hr';
 
 INSERT IGNORE INTO users (id, name, email, password_hash, role, is_active, created_at, updated_at) VALUES
-(UUID(), 'System HR',      'siyabulelag@legal-aid.co.za', '$2y$12$Wd47evruG1zT4kQ7HjNH8ey9j24mdzluryRZwqWcennxueynQBFVW', 'hr',     1, NOW(), NOW()),
-(UUID(), 'Ethics Officer', 'ethics@legal-aid.co.za',      '$2y$12$Wd47evruG1zT4kQ7HjNH8ey9j24mdzluryRZwqWcennxueynQBFVW', 'ethics', 1, NOW(), NOW());
+(UUID(), 'System HR',      'hr@example.org', '$2y$12$Wd47evruG1zT4kQ7HjNH8ey9j24mdzluryRZwqWcennxueynQBFVW', 'hr',     1, NOW(), NOW()),
+(UUID(), 'Ethics Officer', 'ethics@example.org',      '$2y$12$Wd47evruG1zT4kQ7HjNH8ey9j24mdzluryRZwqWcennxueynQBFVW', 'ethics', 1, NOW(), NOW());
 
 -- One-time correction for previously seeded invalid hash; does not overwrite custom passwords.
 UPDATE users
 SET password_hash = '$2y$12$Wd47evruG1zT4kQ7HjNH8ey9j24mdzluryRZwqWcennxueynQBFVW'
-WHERE email IN ('siyabulelag@legal-aid.co.za', 'ethics@legal-aid.co.za')
+WHERE email IN ('hr@example.org', 'ethics@example.org')
     AND password_hash = '$2y$10$rOLJlN/Eg0Y/PjWLBrC.oOvfF.Ov3Nm6u9KxfHvCbGF/LF4tGvkm2';
 
 -- Seed default categories (INSERT IGNORE skips if name already exists)
@@ -37,3 +37,4 @@ INSERT IGNORE INTO stages (id, name, is_active, sort_order, created_at, updated_
 (UUID(), 'Escalated',         1, 4, NOW(), NOW()),
 (UUID(), 'Resolved',          1, 5, NOW(), NOW()),
 (UUID(), 'Closed',            1, 6, NOW(), NOW());
+

@@ -201,11 +201,11 @@ CREATE TABLE users (
 ### Default Credentials (Change in production!)
 ```
 Email: hr@organization.com
-Password: admin@123456
+Password: CHANGE_ME_PASSWORD
 Role: hr
 
 Email: ethics@organization.com
-Password: admin@123456
+Password: CHANGE_ME_PASSWORD
 Role: ethics
 ```
 
@@ -288,7 +288,7 @@ DB_HOST=localhost
 DB_PORT=3306
 DB_DATABASE=anonymous_feedback_tool
 DB_USERNAME=root
-DB_PASSWORD=N3wp@ss4u1
+DB_PASSWORD=CHANGE_ME_DB_PASSWORD
 
 # Application
 APP_NAME="Anonymous Feedback Tool"
@@ -304,7 +304,7 @@ APP_BASE_URL=http://localhost:8000
 | DB_PORT | `3306` |
 | DB_DATABASE | `anonymous_feedback_tool` |
 | DB_USERNAME | `root` |
-| DB_PASSWORD | `N3wp@ss4u1` |
+| DB_PASSWORD | `CHANGE_ME_DB_PASSWORD` |
 
 ## Security Considerations
 
@@ -418,7 +418,7 @@ curl -X POST http://localhost:8000/api/feedback \
 # Test HR login
 curl -X POST http://localhost:8000/api/hr/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"hr@organization.com","password":"admin@123456"}'
+  -d '{"email":"hr@organization.com","password":"CHANGE_ME_PASSWORD"}'
 
 # Use returned token
 TOKEN="eyJhbGc..."
@@ -447,3 +447,4 @@ See [README.md](README.md) for complete API endpoint reference.
 
 **Last Updated**: April 23, 2026  
 **Architecture Version**: 2.0 (MVC + Repository/Service + JWT Auth)
+

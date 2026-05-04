@@ -68,17 +68,10 @@ App\Core\Container::set('db', App\Core\Database::connect($config['database']));
 App\Core\Migration::run(App\Core\Container::get('db'));
 
 
-$jwtSecret = $_ENV['JWT_SECRET'] ?? 'your-super-secret-jwt-key-change-in-production';
-App\Core\Container::set('jwt', new App\Core\JwtService($jwtSecret));
-App\Core\Container::set('auth', new App\Core\Authorization(App\Core\Container::get('jwt')));
-
-
 $db = App\Core\Container::get('db');
 App\Core\Container::set('feedbackRepository', new App\Repositories\FeedbackRepository($db));
 App\Core\Container::set('categoryRepository', new App\Repositories\CategoryRepository($db));
 App\Core\Container::set('statusRepository', new App\Repositories\StatusRepository($db));
-App\Core\Container::set('stageRepository', new App\Repositories\StageRepository($db));
-App\Core\Container::set('ldapAuthService', new App\Services\LdapAuthService($config['app']));
 App\Core\Container::set('emailTemplateRenderer', new App\Services\EmailTemplateRenderer(
     __DIR__ . '/Views/emails'
 ));

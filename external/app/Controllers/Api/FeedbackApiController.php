@@ -137,31 +137,25 @@ final class FeedbackApiController
             Response::json(['error' => 'Attachment not found'], 404);
         }
 
-        // Allow access if the request carries a valid HR JWT token
-        $auth = \App\Core\Container::get('auth');
-        $isAuthenticated = $auth->authenticate() && $auth->isAuthenticated();
+        // External app allows download only when caller provides matching case reference.
+        $referenceNo = strtoupper(trim((string) (\App\Core\Request::query('reference_no') ?? '')));
+        if ($referenceNo === '') {
+            Response::json(['error' => 'Reference number is required to download attachments'], 401);
+        }
 
-        if (!$isAuthenticated) {
-            // Allow anonymous access only when the caller provides the correct reference_no
-            $referenceNo = strtoupper(trim((string) (\App\Core\Request::query('reference_no') ?? '')));
-            if ($referenceNo === '') {
-                Response::json(['error' => 'Authentication required to download attachments'], 401);
-            }
-
-            // Verify the attachment belongs to the supplied reference number
-            $db = \App\Core\Container::get('db');
-            $stmt = $db->prepare(
-                'SELECT f.id FROM feedbacks f
-                 LEFT JOIN attachments a ON a.feedback_id = f.id
-                 LEFT JOIN report_updates ru ON a.report_update_id = ru.id
-                 LEFT JOIN feedbacks f2 ON ru.feedback_id = f2.id
-                 WHERE f.reference_no = ? AND (a.id = ? OR (a.report_update_id IS NOT NULL AND f2.reference_no = ?))
-                 LIMIT 1'
-            );
-            $stmt->execute([$referenceNo, $id, $referenceNo]);
-            if (!$stmt->fetchColumn()) {
-                Response::json(['error' => 'Access denied'], 403);
-            }
+        // Verify the attachment belongs to the supplied reference number
+        $db = \App\Core\Container::get('db');
+        $stmt = $db->prepare(
+            'SELECT f.id FROM feedbacks f
+             LEFT JOIN attachments a ON a.feedback_id = f.id
+             LEFT JOIN report_updates ru ON a.report_update_id = ru.id
+             LEFT JOIN feedbacks f2 ON ru.feedback_id = f2.id
+             WHERE f.reference_no = ? AND (a.id = ? OR (a.report_update_id IS NOT NULL AND f2.reference_no = ?))
+             LIMIT 1'
+        );
+        $stmt->execute([$referenceNo, $id, $referenceNo]);
+        if (!$stmt->fetchColumn()) {
+            Response::json(['error' => 'Access denied'], 403);
         }
 
         $config = \App\Core\Container::get('config');

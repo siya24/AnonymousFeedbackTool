@@ -63,7 +63,7 @@ config/               # Database & app configuration
    export DB_PORT="3306"
    export DB_DATABASE="anonymous_feedback_tool"
    export DB_USERNAME="root"
-   export DB_PASSWORD="N3wp@ss4u1"
+   export DB_PASSWORD="CHANGE_ME_DB_PASSWORD"
    ```
 
 3. **Start PHP server**
@@ -82,11 +82,11 @@ The application will automatically create the database and tables on first run!
 
 ```
 Email: hr@organization.com
-Password: admin@123456
+Password: CHANGE_ME_PASSWORD
 Role: HR
 
 Email: ethics@organization.com  
-Password: admin@123456
+Password: CHANGE_ME_PASSWORD
 Role: Ethics (read-only)
 ```
 
@@ -101,7 +101,7 @@ Host: localhost
 Port: 3306
 Database: anonymous_feedback_tool
 Username: root
-Password: N3wp@ss4u1
+Password: CHANGE_ME_DB_PASSWORD
 ```
 
 Configure via environment variables:
@@ -110,7 +110,7 @@ DB_HOST=localhost
 DB_PORT=3306
 DB_DATABASE=anonymous_feedback_tool
 DB_USERNAME=root
-DB_PASSWORD=N3wp@ss4u1
+DB_PASSWORD=CHANGE_ME_DB_PASSWORD
 JWT_SECRET=your-secret-key-here
 ```
 
@@ -176,7 +176,7 @@ Content-Type: application/json
 
 {
   "email": "hr@organization.com",
-  "password": "admin@123456"
+  "password": "CHANGE_ME_PASSWORD"
 }
 
 Response: { token: "eyJhbGc...", user: { id, name, email, role } }
@@ -258,7 +258,7 @@ curl -X POST http://localhost:8000/api/hr/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "hr@organization.com",
-    "password": "admin@123456"
+    "password": "CHANGE_ME_PASSWORD"
   }'
 ```
 
@@ -363,4 +363,5 @@ This application is designed for organizations to securely collect anonymous fee
 **Version**: 2.0 (MVC + Repository/Service + JWT Auth)  
 **Last Updated**: April 23, 2026  
 **Repository**: https://github.com/siya24/AnonymousFeedbackTool
+
 
