@@ -149,64 +149,64 @@ erDiagram
   USERS ||--o{ AUDIT_LOGS : "actor_user_id (SET NULL on delete)"
 
   CATEGORIES {
-    CHAR(36) id PK
+    CHAR id PK
     string name
     bool is_active
     int sort_order
   }
   STATUSES {
-    CHAR(36) id PK
+    CHAR id PK
     string name
     bool is_active
     int sort_order
   }
   STAGES {
-    CHAR(36) id PK
+    CHAR id PK
     string name
     bool is_active
     int sort_order
   }
   FEEDBACKS {
-    CHAR(36) id PK
+    CHAR id PK
     string reference_no
-    CHAR(36) category_id FK
-    CHAR(36) status_id FK
-    CHAR(36) stage_id FK
+    CHAR category_id FK
+    CHAR status_id FK
+    CHAR stage_id FK
     string priority
   }
   REPORT_UPDATES {
-    CHAR(36) id PK
-    CHAR(36) feedback_id FK
+    CHAR id PK
+    CHAR feedback_id FK
     string update_reference_no
   }
   ATTACHMENTS {
-    CHAR(36) id PK
-    CHAR(36) feedback_id FK
-    CHAR(36) report_update_id FK
+    CHAR id PK
+    CHAR feedback_id FK
+    CHAR report_update_id FK
     string stored_name
     int size_bytes
   }
   NOTIFICATIONS {
-    CHAR(36) id PK
-    CHAR(36) feedback_id FK
+    CHAR id PK
+    CHAR feedback_id FK
     string kind
     string recipient
   }
   AUDIT_LOGS {
-    CHAR(36) id PK
-    CHAR(36) feedback_id FK
-    CHAR(36) actor_user_id FK
+    CHAR id PK
+    CHAR feedback_id FK
+    CHAR actor_user_id FK
     string action
     datetime created_at
   }
   USERS {
-    CHAR(36) id PK
+    CHAR id PK
     string email
     string role
     bool is_active
   }
   LOGIN_ATTEMPTS {
-    CHAR(36) id PK
+    CHAR id PK
     string ip
     bool success
     datetime attempted_at
