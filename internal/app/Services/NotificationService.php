@@ -149,6 +149,96 @@ class NotificationService
         }
     }
 
+    public function notifyCaseAssigned(
+        string $feedbackId,
+        string $reference,
+        string $category,
+        string $recipientEmail,
+        string $assigneeName,
+        string $assignedByName,
+        bool $isReassignment = false
+    ): void {
+        if (!$this->immediateNotificationsEnabled) {
+            return;
+        }
+
+        $recipient = trim($recipientEmail);
+        if ($this->isDisallowedRecipient($recipient)) {
+            return;
+        }
+
+        $caseUrl = $this->baseUrl . '/hr/cases/' . urlencode($reference);
+        $verb = $isReassignment ? 'reassigned' : 'assigned';
+        $subject = "Case {$verb} to you ({$reference})";
+        $plain = "A feedback case has been {$verb} to you.\n\n"
+            . "Reference: {$reference}\n"
+            . "Category:  {$category}\n"
+            . "Assigned to: {$assigneeName}\n"
+            . "Assigned by: {$assignedByName}\n\n"
+            . "Review it here:\n{$caseUrl}";
+        $html = $this->templateRenderer->renderNotification([
+            'title' => $isReassignment ? 'Case Reassigned to You' : 'Case Assigned to You',
+            'badge' => $isReassignment ? 'REASSIGNED' : 'ASSIGNED',
+            'badgeColor' => '#008AC4',
+            'reference' => $reference,
+            'category' => $category,
+            'message' => "This case was {$verb} to you by {$assignedByName}.",
+            'caseUrl' => $caseUrl,
+            'ctaLabel' => 'Open Assigned Case',
+            'submittedAt' => '',
+        ]);
+
+        $recipients = $this->applyDevOverride([$recipient]);
+        foreach ($recipients as $target) {
+            $this->mailer->sendHtml($target, $subject, $html, $plain);
+            $this->repository->logNotification($feedbackId, 'assignment_notif', $target);
+        }
+    }
+
+    public function notifyCaseUnassigned(
+        string $feedbackId,
+        string $reference,
+        string $category,
+        string $recipientEmail,
+        string $assigneeName,
+        string $unassignedByName
+    ): void {
+        if (!$this->immediateNotificationsEnabled) {
+            return;
+        }
+
+        $recipient = trim($recipientEmail);
+        if ($this->isDisallowedRecipient($recipient)) {
+            return;
+        }
+
+        $caseUrl = $this->baseUrl . '/hr/cases/' . urlencode($reference);
+        $subject = "Case unassigned from you ({$reference})";
+        $plain = "A feedback case has been unassigned from you.\n\n"
+            . "Reference: {$reference}\n"
+            . "Category:  {$category}\n"
+            . "Previously assigned to: {$assigneeName}\n"
+            . "Updated by: {$unassignedByName}\n\n"
+            . "View case details:\n{$caseUrl}";
+        $html = $this->templateRenderer->renderNotification([
+            'title' => 'Case Unassigned',
+            'badge' => 'UNASSIGNED',
+            'badgeColor' => '#9d2722',
+            'reference' => $reference,
+            'category' => $category,
+            'message' => "This case was unassigned from you by {$unassignedByName}.",
+            'caseUrl' => $caseUrl,
+            'ctaLabel' => 'View Case',
+            'submittedAt' => '',
+        ]);
+
+        $recipients = $this->applyDevOverride([$recipient]);
+        foreach ($recipients as $target) {
+            $this->mailer->sendHtml($target, $subject, $html, $plain);
+            $this->repository->logNotification($feedbackId, 'unassignment_notif', $target);
+        }
+    }
+
     public function processScheduledNotifications(): array
     {
         if (!$this->scheduledNotificationsEnabled) {

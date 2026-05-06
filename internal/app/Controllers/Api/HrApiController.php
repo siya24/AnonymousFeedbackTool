@@ -467,9 +467,10 @@ final class HrApiController
 
             $user = $this->auth->getUser();
             $userId = $user['user_id'] ?? 'unknown';
+            $userName = (string) ($user['name'] ?? 'HR user');
 
             
-            $result = $this->feedbackService->updateCaseForHr($reference, $payload, (string)$userId);
+            $result = $this->feedbackService->updateCaseForHr($reference, $payload, (string) $userId, $userName);
             Response::json($result);
         } catch (\RuntimeException $e) {
             $code = (int) ($e->getCode() ?: 400);
@@ -508,6 +509,20 @@ final class HrApiController
 
             $data = $this->feedbackService->getDashboardTrends();
             Response::json(['data' => $data]);
+        } catch (\RuntimeException $e) {
+            $code = (int) ($e->getCode() ?: 400);
+            Response::json(['error' => $e->getMessage()], $code);
+        }
+    }
+
+    public function listAssignablePersonnel(array $params = []): void
+    {
+        try {
+            $this->auth->authenticate();
+            $this->auth->requireAnyRole(Authorization::CONSOLE_ROLES);
+
+            $rows = $this->feedbackService->listAssignablePersonnel();
+            Response::json(['data' => $rows]);
         } catch (\RuntimeException $e) {
             $code = (int) ($e->getCode() ?: 400);
             Response::json(['error' => $e->getMessage()], $code);

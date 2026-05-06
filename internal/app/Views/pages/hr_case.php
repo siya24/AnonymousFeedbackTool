@@ -55,6 +55,14 @@
                 </div>
 
                 <div class="mb-3">
+                    <label for="assigned-to-user-id" class="form-label"><i class="fas fa-user-check me-1"></i>Assigned Investigator</label>
+                    <select id="assigned-to-user-id" name="assigned_to_user_id" class="form-select">
+                        <option value="">Unassigned</option>
+                    </select>
+                    <div class="form-text">Assign this case to HR personnel responsible for investigation.</div>
+                </div>
+
+                <div class="mb-3">
                     <label for="anon-summary" class="form-label"><i class="fas fa-file-text me-1"></i>Anonymized Summary</label>
                     <textarea id="anon-summary" name="anonymized_summary" class="form-control" rows="3"></textarea>
                 </div>

@@ -106,11 +106,14 @@ class FeedbackRepository {
         $stmt = $this->pdo->prepare(
             'SELECT r.*, s.name AS status,
                     COALESCE(r.category_other, c.name) AS category,
-                    st.name AS stage
+                    st.name AS stage,
+                    assignee.name AS assigned_to_name,
+                    assignee.email AS assigned_to_email
              FROM feedbacks r
              LEFT JOIN statuses s  ON s.id  = r.status_id
              LEFT JOIN categories c ON c.id = r.category_id
              LEFT JOIN stages st   ON st.id = r.stage_id
+             LEFT JOIN users assignee ON assignee.id = r.assigned_to_user_id
              WHERE r.reference_no = ?'
         );
         $stmt->execute([$reference]);
@@ -165,14 +168,17 @@ class FeedbackRepository {
         $params = [];
         $query = 'SELECT r.*, s.name AS status,
                          COALESCE(r.category_other, c.name) AS category,
-                         st.name AS stage
+                         st.name AS stage,
+                         assignee.name AS assigned_to_name,
+                         assignee.email AS assigned_to_email
                   FROM feedbacks r
                   LEFT JOIN statuses s   ON s.id  = r.status_id
                   LEFT JOIN categories c ON c.id  = r.category_id
-                  LEFT JOIN stages st    ON st.id = r.stage_id';
+                  LEFT JOIN stages st    ON st.id = r.stage_id
+                  LEFT JOIN users assignee ON assignee.id = r.assigned_to_user_id';
         $query .= $this->buildCaseWhereClause($filters, $params);
 
-        $allowedSortBy = ['created_at', 'category', 'status', 'stage', 'reference_no', 'priority'];
+        $allowedSortBy = ['created_at', 'category', 'status', 'stage', 'reference_no', 'priority', 'assigned_to'];
         $sortBy = in_array($filters['sort_by'] ?? 'created_at', $allowedSortBy, true)
             ? (string) $filters['sort_by']
             : 'created_at';
@@ -185,6 +191,7 @@ class FeedbackRepository {
             'stage'        => 'st.name',
             'reference_no' => 'r.reference_no',
             'priority'     => 'r.priority',
+            'assigned_to'  => 'assignee.name',
         ];
         $query .= ' ORDER BY ' . ($sortColumnMap[$sortBy] ?? 'r.created_at') . ' ' . $sortOrder;
 
@@ -215,14 +222,17 @@ class FeedbackRepository {
         $params = [];
         $query = 'SELECT r.*, s.name AS status,
                          COALESCE(r.category_other, c.name) AS category,
-                         st.name AS stage
+                    st.name AS stage,
+                    assignee.name AS assigned_to_name,
+                    assignee.email AS assigned_to_email
                   FROM feedbacks r
                   LEFT JOIN statuses s   ON s.id  = r.status_id
                   LEFT JOIN categories c ON c.id  = r.category_id
-                  LEFT JOIN stages st    ON st.id = r.stage_id';
+                LEFT JOIN stages st    ON st.id = r.stage_id
+                LEFT JOIN users assignee ON assignee.id = r.assigned_to_user_id';
         $query .= $this->buildCaseWhereClause($filters, $params);
 
-        $allowedSortBy = ['created_at', 'category', 'status', 'stage', 'reference_no', 'priority'];
+         $allowedSortBy = ['created_at', 'category', 'status', 'stage', 'reference_no', 'priority', 'assigned_to'];
         $sortBy = in_array($filters['sort_by'] ?? 'created_at', $allowedSortBy, true)
             ? (string) $filters['sort_by']
             : 'created_at';
@@ -235,6 +245,7 @@ class FeedbackRepository {
             'stage'        => 'st.name',
             'reference_no' => 'r.reference_no',
             'priority'     => 'r.priority',
+            'assigned_to'  => 'assignee.name',
         ];
         $query .= ' ORDER BY ' . ($sortColumnMap[$sortBy] ?? 'r.created_at') . ' ' . $sortOrder;
         $query .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) $offset;
@@ -281,7 +292,7 @@ class FeedbackRepository {
     
     public function updateReport(string $reference, array $data, ?string $updatedByUserId = null): bool {
         $allowed = ['priority', 'stage', 'status', 'anonymized_summary', 'action_taken',
-                    'outcome_comments', 'internal_notes', 'acknowledged_at'];
+                    'outcome_comments', 'internal_notes', 'acknowledged_at', 'assigned_to_user_id', 'assigned_at'];
 
         $updates = [];
         $params  = [];
@@ -294,6 +305,9 @@ class FeedbackRepository {
                 } elseif ($key === 'stage') {
                     $updates[] = 'stage_id = ?';
                     $params[]  = $this->getStageIdByName((string) $value);
+                } elseif ($key === 'assigned_to_user_id') {
+                    $updates[] = 'assigned_to_user_id = ?';
+                    $params[]  = ($value === '' || $value === null) ? null : $value;
                 } else {
                     $updates[] = "$key = ?";
                     $params[]  = $value;
@@ -313,6 +327,19 @@ class FeedbackRepository {
 
         $stmt = $this->pdo->prepare($query);
         return $stmt->execute($params);
+    }
+
+    public function listAssignablePersonnel(): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT id, name, email, role
+             FROM users
+             WHERE is_active = 1
+               AND role IN ('hr', 'officer', 'manager')
+             ORDER BY name ASC, email ASC"
+        );
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     

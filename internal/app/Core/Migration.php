@@ -128,5 +128,19 @@ final class Migration
         if ($users !== false) {
             $pdo->exec($users);
         }
+
+        try {
+            if (!self::hasColumn($pdo, 'feedbacks', 'assigned_to_user_id')) {
+                $pdo->exec('ALTER TABLE feedbacks ADD COLUMN assigned_to_user_id CHAR(36) NULL AFTER stage_id');
+                $pdo->exec('ALTER TABLE feedbacks ADD CONSTRAINT fk_feedbacks__assigned_to_user_id__users FOREIGN KEY (assigned_to_user_id) REFERENCES users(id) ON DELETE SET NULL');
+                $pdo->exec('CREATE INDEX idx_assigned_to_user_id ON feedbacks (assigned_to_user_id)');
+            }
+
+            if (!self::hasColumn($pdo, 'feedbacks', 'assigned_at')) {
+                $pdo->exec('ALTER TABLE feedbacks ADD COLUMN assigned_at DATETIME NULL AFTER assigned_to_user_id');
+            }
+        } catch (\Throwable $e) {
+            
+        }
     }
 }

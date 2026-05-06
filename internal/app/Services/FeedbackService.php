@@ -136,6 +136,11 @@ class FeedbackService {
         ];
     }
 
+    public function listAssignablePersonnel(): array
+    {
+        return $this->repository->listAssignablePersonnel();
+    }
+
     
     public function processScheduledNotifications(): array {
         
@@ -147,7 +152,7 @@ class FeedbackService {
     }
 
     
-    public function updateCaseForHr(string $reference, array $updateData, string $hrUserId): array {
+    public function updateCaseForHr(string $reference, array $updateData, string $hrUserId, string $hrUserName = 'HR user'): array {
         $report = $this->repository->findByReference($reference);
         
         if (!$report) {
@@ -167,12 +172,59 @@ class FeedbackService {
             unset($updateData['acknowledge']);
         }
 
+        $assignmentChanged = false;
+        $isReassignment = false;
+        $wasUnassigned = false;
+
+        if (array_key_exists('assigned_to_user_id', $updateData)) {
+            $incomingAssignee = trim((string) ($updateData['assigned_to_user_id'] ?? ''));
+            $existingAssignee = (string) ($report['assigned_to_user_id'] ?? '');
+            $updateData['assigned_to_user_id'] = $incomingAssignee !== '' ? $incomingAssignee : null;
+
+            if ($incomingAssignee !== '' && $incomingAssignee !== $existingAssignee) {
+                $updateData['assigned_at'] = date('Y-m-d H:i:s');
+                $assignmentChanged = true;
+                $isReassignment = ($existingAssignee !== '');
+            }
+
+            if ($incomingAssignee === '' && $existingAssignee !== '') {
+                $updateData['assigned_at'] = null;
+                $wasUnassigned = true;
+            }
+        }
+
         
         $this->repository->updateReport($reference, $updateData, $hrUserId);
         
         
         $details = json_encode($updateData);
         $this->repository->logAudit("hr:{$hrUserId}", 'case_updated', $reference, $details, $hrUserId);
+
+        if ($assignmentChanged) {
+            $updated = $this->repository->findByReference($reference);
+            if ($updated && !empty($updated['assigned_to_email'])) {
+                $this->notificationService->notifyCaseAssigned(
+                    (string) $report['id'],
+                    $reference,
+                    (string) ($updated['category'] ?? $report['category'] ?? ''),
+                    (string) $updated['assigned_to_email'],
+                    (string) ($updated['assigned_to_name'] ?? 'Assigned investigator'),
+                    $hrUserName,
+                    $isReassignment
+                );
+            }
+        }
+
+        if ($wasUnassigned && !empty($report['assigned_to_email'])) {
+            $this->notificationService->notifyCaseUnassigned(
+                (string) $report['id'],
+                $reference,
+                (string) ($report['category'] ?? ''),
+                (string) $report['assigned_to_email'],
+                (string) ($report['assigned_to_name'] ?? 'Assigned investigator'),
+                $hrUserName
+            );
+        }
         
         return [
             'success' => true,

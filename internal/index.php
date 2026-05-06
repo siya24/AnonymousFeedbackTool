@@ -197,6 +197,7 @@ $router->add('GET', '/api/hr/me', [HrApiController::class, 'getCurrentUser']);
 $router->add('GET', '/api/hr/cases', [HrApiController::class, 'listCases']);
 $router->add('GET', '/api/hr/cases/{reference}', [HrApiController::class, 'caseDetail']);
 $router->add('POST', '/api/hr/cases/{reference}', [HrApiController::class, 'updateCase']);
+$router->add('GET', '/api/hr/personnel', [HrApiController::class, 'listAssignablePersonnel']);
 $router->add('GET', '/api/hr/dashboard/trends', [HrApiController::class, 'dashboardTrends']);
 $router->add('GET', '/api/hr/categories', [HrCategoryApiController::class, 'listAll']);
 $router->add('GET', '/api/hr/categories/{id}', [HrCategoryApiController::class, 'getById']);

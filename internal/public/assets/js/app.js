@@ -9,6 +9,22 @@ const TokenManager = {
     hasToken: () => !!localStorage.getItem('hr_token')
 };
 
+const buildHrLoginRedirectUrl = () => {
+    const current = `${window.location.pathname || '/'}${window.location.search || ''}${window.location.hash || ''}`;
+    return `/hr?return_to=${encodeURIComponent(current)}`;
+};
+
+const getSafeReturnToPath = () => {
+    const value = new URLSearchParams(window.location.search).get('return_to') || '';
+    if (!value.startsWith('/') || value.startsWith('//')) {
+        return '';
+    }
+    if (value.startsWith('/api/')) {
+        return '';
+    }
+    return value;
+};
+
 async function api(url, options = {}) {
     const response = await fetch(url, {
         credentials: 'same-origin',
@@ -61,8 +77,8 @@ function renderTable(rows) {
             <td><strong>${r.reference_no || ''}</strong></td>
             <td>${r.category || ''}</td>
             <td>${statusBadge}</td>
-            <td>${(r.anonymized_summary || '').substring(0, 50)}...</td>
-            <td>${(r.outcome_comments || '').substring(0, 50)}...</td>
+            <td>${escHtml(r.anonymized_summary || '')}</td>
+            <td>${escHtml(r.outcome_comments || '')}</td>
         </tr>`;
     }).join('');
     return `<div class="table-responsive"><table class="table table-striped table-hover"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
@@ -73,16 +89,18 @@ function renderHrCasesTable(rows) {
         return '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i>No feedback cases found.</div>';
     }
 
-    const head = '<tr><th>Date</th><th>Reference</th><th>Category</th><th>Status</th><th>Priority</th><th>Action</th></tr>';
+    const head = '<tr><th>Date</th><th>Reference</th><th>Category</th><th>Status</th><th>Priority</th><th>Assigned To</th><th>Action</th></tr>';
     const body = rows.map((r) => {
         const reference = r.reference_no || '';
         const href = `/hr/cases/${encodeURIComponent(reference)}`;
+        const assignedTo = r.assigned_to_name ? `${r.assigned_to_name}${r.assigned_to_email ? ` (${r.assigned_to_email})` : ''}` : 'Unassigned';
         return `<tr>
             <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
             <td><strong>${reference}</strong></td>
             <td>${r.category || ''}</td>
             <td>${r.status || ''}</td>
             <td>${r.priority || ''}</td>
+            <td>${escHtml(assignedTo)}</td>
             <td><a class="btn btn-sm btn-outline-primary" href="${href}"><i class="fas fa-arrow-right me-1"></i>Open</a></td>
         </tr>`;
     }).join('');
@@ -172,6 +190,8 @@ function initHrPage() {
         return;
     }
 
+    const returnTo = getSafeReturnToPath();
+
     const setLoggedInUi = (isLoggedIn) => {
         const loginInputs = loginForm.querySelectorAll('input');
         const loginSubmit = loginForm.querySelector('[type="submit"]');
@@ -202,6 +222,10 @@ function initHrPage() {
     };
 
     if (TokenManager.hasToken()) {
+        if (returnTo && returnTo !== '/hr') {
+            window.location.href = returnTo;
+            return;
+        }
         setLoggedInUi(true);
     }
 
@@ -223,6 +247,11 @@ function initHrPage() {
             setLoggedInUi(true);
             loginForm.password.value = '';
             hrOutput.classList.add('d-none');
+
+            if (returnTo && returnTo !== '/hr') {
+                window.location.href = returnTo;
+                return;
+            }
 
             await loadFilterOptions();
             await loadCases();
@@ -343,10 +372,11 @@ function initHrCasePage() {
     const updateForm = byId('hr-update-form');
     const statusSelect = byId('status');
     const stageSelect = byId('stage');
+    const assigneeSelect = byId('assigned-to-user-id');
     const reference = (casePage.dataset.reference || '').trim();
 
     if (!TokenManager.hasToken()) {
-        window.location.href = '/hr';
+        window.location.href = buildHrLoginRedirectUrl();
         return;
     }
 
@@ -360,6 +390,9 @@ function initHrCasePage() {
             stageSelect.value = report.stage || 'Logged';
         }
         updateForm.status.value = report.status || 'Investigation pending';
+        if (assigneeSelect) {
+            assigneeSelect.value = report.assigned_to_user_id || '';
+        }
         updateForm.anonymized_summary.value = report.anonymized_summary || '';
         updateForm.action_taken.value = report.action_taken || '';
         updateForm.outcome_comments.value = report.outcome_comments || '';
@@ -371,6 +404,10 @@ function initHrCasePage() {
     const renderCaseSummary = (report, attachments) => {
         const created = report.created_at ? new Date(report.created_at).toLocaleString() : '';
         const acknowledged = report.acknowledged_at ? new Date(report.acknowledged_at).toLocaleString() : 'Not acknowledged';
+        const assignedAt = report.assigned_at ? new Date(report.assigned_at).toLocaleString() : 'Not assigned';
+        const assignedTo = report.assigned_to_name
+            ? `${report.assigned_to_name}${report.assigned_to_email ? ` (${report.assigned_to_email})` : ''}`
+            : 'Unassigned';
         const attachmentLinks = (attachments || []).map(a =>
             `<a href="/api/attachments/${encodeURIComponent(a.id)}" download="${escHtml(a.original_name)}" class="me-2"><i class="fas fa-paperclip me-1"></i>${escHtml(a.original_name)}</a>`
         ).join('');
@@ -381,6 +418,8 @@ function initHrCasePage() {
             <div class="col-md-6"><strong>Priority:</strong> ${report.priority || ''}</div>
             <div class="col-md-6"><strong>Created:</strong> ${created}</div>
             <div class="col-md-6"><strong>Acknowledged:</strong> ${acknowledged}</div>
+            <div class="col-md-6"><strong>Assigned To:</strong> ${escHtml(assignedTo)}</div>
+            <div class="col-md-6"><strong>Assigned At:</strong> ${assignedAt}</div>
             <div class="col-12"><strong>Description:</strong><div class="mt-1">${report.description || ''}</div></div>
             ${attachmentLinks ? `<div class="col-12"><strong>Attachments:</strong><div class="mt-1">${attachmentLinks}</div></div>` : ''}
         </div>`;
@@ -410,6 +449,18 @@ function initHrCasePage() {
         }
     };
 
+    const loadAssignablePersonnel = async () => {
+        if (!assigneeSelect) {
+            return;
+        }
+        const data = await api(`${API_BASE}/hr/personnel`);
+        const opts = (data.data || []).map((u) => {
+            const label = `${u.name || u.email}${u.email ? ` (${u.email})` : ''}`;
+            return `<option value="${escHtml(u.id || '')}">${escHtml(label)}</option>`;
+        }).join('');
+        assigneeSelect.innerHTML = `<option value="">Unassigned</option>${opts}`;
+    };
+
 
 
     updateForm?.addEventListener('submit', async (e) => {
@@ -425,6 +476,7 @@ function initHrCasePage() {
             priority: formData.get('priority'),
             stage: formData.get('stage'),
             status: formData.get('status'),
+            assigned_to_user_id: formData.get('assigned_to_user_id') || null,
             anonymized_summary: formData.get('anonymized_summary'),
             action_taken: formData.get('action_taken'),
             outcome_comments: formData.get('outcome_comments'),
@@ -450,7 +502,7 @@ function initHrCasePage() {
 
     (async () => {
         try {
-            await Promise.all([loadStatuses(), loadStages()]);
+            await Promise.all([loadStatuses(), loadStages(), loadAssignablePersonnel()]);
             await loadCase();
         } catch (err) {
             summary.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${err.message}</div>`;
@@ -471,7 +523,7 @@ function initHrDashboardPage() {
     const refreshBtn = byId('hr-dashboard-refresh');
 
     if (!TokenManager.hasToken()) {
-        window.location.href = '/hr';
+        window.location.href = buildHrLoginRedirectUrl();
         return;
     }
 
@@ -571,7 +623,7 @@ function initHrCategories() {
 
     if (!section) return;
     if (!TokenManager.hasToken()) {
-        window.location.href = '/hr';
+        window.location.href = buildHrLoginRedirectUrl();
         return;
     }
 
@@ -695,7 +747,7 @@ function initHrStatuses() {
 
     if (!section) return;
     if (!TokenManager.hasToken()) {
-        window.location.href = '/hr';
+        window.location.href = buildHrLoginRedirectUrl();
         return;
     }
 
@@ -825,7 +877,7 @@ function initHrStages() {
 
     if (!section) return;
     if (!TokenManager.hasToken()) {
-        window.location.href = '/hr';
+        window.location.href = buildHrLoginRedirectUrl();
         return;
     }
 
