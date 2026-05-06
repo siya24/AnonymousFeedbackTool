@@ -43,3 +43,13 @@ external/data/.app_key
 external/uploads/*
 !external/uploads/.gitkeep
 !external/data/.gitkeep
+
+# Root private upload storage
+anonymous_feedback_private_uploads/
+
+# Python build artifacts
+**/__pycache__/
+*.pyc
+
+# Temporary Office lock files
+~$*.docx
