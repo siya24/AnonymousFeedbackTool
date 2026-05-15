@@ -17,6 +17,12 @@
             <a href="/hr/stages" class="btn btn-outline-secondary">
                 <i class="fas fa-layer-group me-1"></i>Stages
             </a>
+            <a href="/hr/roles" class="btn btn-outline-secondary">
+                <i class="fas fa-user-tag me-1"></i>Roles
+            </a>
+            <a href="/hr/personnel-roles" class="btn btn-outline-secondary">
+                <i class="fas fa-users-cog me-1"></i>Personnel Roles
+            </a>
         </div>
     </div>
 

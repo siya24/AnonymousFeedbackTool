@@ -141,6 +141,11 @@ class FeedbackService {
         return $this->repository->listAssignablePersonnel();
     }
 
+    public function listAssignableRoles(): array
+    {
+        return $this->repository->listAssignableRoles();
+    }
+
     
     public function processScheduledNotifications(): array {
         
@@ -180,6 +185,9 @@ class FeedbackService {
             $incomingAssignee = trim((string) ($updateData['assigned_to_user_id'] ?? ''));
             $existingAssignee = (string) ($report['assigned_to_user_id'] ?? '');
             $updateData['assigned_to_user_id'] = $incomingAssignee !== '' ? $incomingAssignee : null;
+            if ($incomingAssignee !== '') {
+                $updateData['assigned_role_id'] = null;
+            }
 
             if ($incomingAssignee !== '' && $incomingAssignee !== $existingAssignee) {
                 $updateData['assigned_at'] = date('Y-m-d H:i:s');
@@ -190,6 +198,24 @@ class FeedbackService {
             if ($incomingAssignee === '' && $existingAssignee !== '') {
                 $updateData['assigned_at'] = null;
                 $wasUnassigned = true;
+            }
+        }
+
+        if (array_key_exists('assigned_role_id', $updateData)) {
+            $incomingRole = trim((string) ($updateData['assigned_role_id'] ?? ''));
+            $existingRole = (string) ($report['assigned_role_id'] ?? '');
+            $updateData['assigned_role_id'] = $incomingRole !== '' ? $incomingRole : null;
+
+            if ($incomingRole !== '') {
+                $updateData['assigned_to_user_id'] = null;
+                if ($incomingRole !== $existingRole) {
+                    $updateData['assigned_at'] = date('Y-m-d H:i:s');
+                    $assignmentChanged = false;
+                }
+            }
+
+            if ($incomingRole === '' && $existingRole !== '' && empty($updateData['assigned_to_user_id'])) {
+                $updateData['assigned_at'] = null;
             }
         }
 
@@ -354,5 +380,150 @@ class FeedbackService {
         }
 
         return $stored;
+    }
+
+    // ========== Co-Investigator Management ==========
+
+    public function addCoInvestigator(string $feedbackId, string $userId, ?string $addedByUserId = null): array {
+        // Get feedback to verify it exists
+        $feedback = $this->repository->findById($feedbackId);
+        if (!$feedback) {
+            throw new \RuntimeException('Feedback not found', 404);
+        }
+
+        // Prevent adding the primary assignee as a co-investigator
+        if ($feedback['assigned_to_user_id'] === $userId) {
+            throw new \RuntimeException('Primary investigator cannot be added as co-investigator', 422);
+        }
+
+        // Add the co-investigator
+        $added = $this->repository->addCoInvestigator($feedbackId, $userId, $addedByUserId);
+        if (!$added) {
+            throw new \RuntimeException('User is already a co-investigator', 409);
+        }
+
+        // Send notification to co-investigator
+        try {
+            $coInvestigator = $this->repository->getUserById($userId);
+            $addedByUser = $addedByUserId ? $this->repository->getUserById($addedByUserId) : null;
+            
+            if ($coInvestigator && $coInvestigator['email']) {
+                $this->notificationService->notifyCoInvestigatorAdded(
+                    $feedbackId,
+                    (string) $feedback['reference_no'],
+                    (string) $feedback['category'],
+                    (string) $coInvestigator['email'],
+                    (string) $coInvestigator['name'],
+                    $addedByUser ? (string) $addedByUser['name'] : 'HR User'
+                );
+            }
+        } catch (\Exception $e) {
+            // Log error but don't fail the operation
+            error_log("Failed to send co-investigator notification: " . $e->getMessage());
+        }
+
+        return $this->repository->getCoInvestigators($feedbackId);
+    }
+
+    public function removeCoInvestigator(string $feedbackId, string $userId, ?string $removedByUserId = null): array {
+        $feedback = $this->repository->findById($feedbackId);
+        if (!$feedback) {
+            throw new \RuntimeException('Feedback not found', 404);
+        }
+
+        $this->repository->removeCoInvestigator($feedbackId, $userId);
+        
+        // Send notification to removed co-investigator
+        try {
+            $coInvestigator = $this->repository->getUserById($userId);
+            $removedByUser = $removedByUserId ? $this->repository->getUserById($removedByUserId) : null;
+            
+            if ($coInvestigator && $coInvestigator['email']) {
+                $this->notificationService->notifyCoInvestigatorRemoved(
+                    $feedbackId,
+                    (string) $feedback['reference_no'],
+                    (string) $feedback['category'],
+                    (string) $coInvestigator['email'],
+                    (string) $coInvestigator['name'],
+                    $removedByUser ? (string) $removedByUser['name'] : 'HR User'
+                );
+            }
+        } catch (\Exception $e) {
+            // Log error but don't fail the operation
+            error_log("Failed to send co-investigator removal notification: " . $e->getMessage());
+        }
+
+        return $this->repository->getCoInvestigators($feedbackId);
+    }
+
+    public function getCoInvestigators(string $feedbackId): array {
+        $feedback = $this->repository->findById($feedbackId);
+        if (!$feedback) {
+            throw new \RuntimeException('Feedback not found', 404);
+        }
+
+        return $this->repository->getCoInvestigators($feedbackId);
+    }
+
+    public function replaceCoInvestigators(string $feedbackId, array $userIds, ?string $updatedByUserId = null): array {
+        $feedback = $this->repository->findById($feedbackId);
+        if (!$feedback) {
+            throw new \RuntimeException('Feedback not found', 404);
+        }
+
+        // Get current co-investigators
+        $currentCoInvestigators = $this->repository->getCoInvestigators($feedbackId);
+        $currentUserIds = array_column($currentCoInvestigators, 'user_id');
+
+        // Remove all existing co-investigators
+        $this->repository->removeAllCoInvestigators($feedbackId);
+
+        // Send removal notifications
+        try {
+            $removedByUser = $updatedByUserId ? $this->repository->getUserById($updatedByUserId) : null;
+            foreach ($currentUserIds as $userId) {
+                $coInvestigator = $this->repository->getUserById($userId);
+                if ($coInvestigator && $coInvestigator['email']) {
+                    $this->notificationService->notifyCoInvestigatorRemoved(
+                        $feedbackId,
+                        (string) $feedback['reference_no'],
+                        (string) $feedback['category'],
+                        (string) $coInvestigator['email'],
+                        (string) $coInvestigator['name'],
+                        $removedByUser ? (string) $removedByUser['name'] : 'HR User'
+                    );
+                }
+            }
+        } catch (\Exception $e) {
+            error_log("Failed to send co-investigator removal notifications: " . $e->getMessage());
+        }
+
+        // Add new co-investigators
+        try {
+            $addedByUser = $updatedByUserId ? $this->repository->getUserById($updatedByUserId) : null;
+            foreach ($userIds as $userId) {
+                // Prevent adding the primary assignee as a co-investigator
+                if ($feedback['assigned_to_user_id'] !== $userId) {
+                    $this->repository->addCoInvestigator($feedbackId, $userId, $updatedByUserId);
+                    
+                    // Send notification to newly added co-investigator
+                    $coInvestigator = $this->repository->getUserById($userId);
+                    if ($coInvestigator && $coInvestigator['email']) {
+                        $this->notificationService->notifyCoInvestigatorAdded(
+                            $feedbackId,
+                            (string) $feedback['reference_no'],
+                            (string) $feedback['category'],
+                            (string) $coInvestigator['email'],
+                            (string) $coInvestigator['name'],
+                            $addedByUser ? (string) $addedByUser['name'] : 'HR User'
+                        );
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            error_log("Failed to add co-investigators or send notifications: " . $e->getMessage());
+        }
+
+        return $this->repository->getCoInvestigators($feedbackId);
     }
 }

@@ -45,4 +45,14 @@ final class PageController
     {
         Response::view('pages/hr_stages', ['title' => 'Manage Stages']);
     }
+
+    public function hrRoles(array $params = []): void
+    {
+        Response::view('pages/hr_roles', ['title' => 'Manage Assignment Roles']);
+    }
+
+    public function hrPersonnelRoles(array $params = []): void
+    {
+        Response::view('pages/hr_personnel_roles', ['title' => 'Manage Personnel Roles']);
+    }
 }

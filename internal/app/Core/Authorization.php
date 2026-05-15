@@ -12,7 +12,7 @@ class Authorization {
     public const CONSOLE_ROLES = [self::ROLE_HR, self::ROLE_ETHICS, self::ROLE_MANAGER, self::ROLE_OFFICER];
 
     /** Roles permitted to create/update cases */
-    public const CASE_WRITE_ROLES = [self::ROLE_HR, self::ROLE_ETHICS, self::ROLE_OFFICER];
+    public const CASE_WRITE_ROLES = [self::ROLE_HR, self::ROLE_OFFICER];
 
     /** Roles permitted to manage system configuration (categories, statuses, stages) */
     public const CONFIG_ROLES = [self::ROLE_HR, self::ROLE_OFFICER];

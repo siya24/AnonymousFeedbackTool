@@ -6,15 +6,18 @@ namespace App\Controllers\Api;
 use App\Core\Container;
 use App\Core\Request;
 use App\Core\Response;
+use App\Core\Authorization;
 use App\Services\FeedbackService;
 
 final class FeedbackApiController
 {
     private FeedbackService $feedbackService;
+    private Authorization $auth;
 
     public function __construct()
     {
         $this->feedbackService = Container::get('feedbackService');
+        $this->auth = Container::get('auth');
     }
 
     
@@ -202,6 +205,105 @@ final class FeedbackApiController
             Response::json(['data' => $reports]);
         } catch (\RuntimeException $e) {
             Response::json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    // ========== Co-Investigator Management ==========
+
+    public function addCoInvestigator(array $params): void
+    {
+        try {
+            $this->auth->authenticate();
+            $this->auth->requireAuth();
+            $currentUser = $this->auth->getUser();
+
+            $feedbackId = $params['id'] ?? null;
+            $input = Request::input();
+            $userId = $input['user_id'] ?? null;
+
+            if (!$feedbackId || !$userId) {
+                Response::json(['error' => 'Feedback ID and user ID are required.'], 422);
+                return;
+            }
+
+            $coInvestigators = $this->feedbackService->addCoInvestigator(
+                $feedbackId, 
+                $userId, 
+                (string) ($currentUser['user_id'] ?? '')
+            );
+            Response::json(['data' => $coInvestigators, 'message' => 'Co-investigator added successfully.'], 201);
+        } catch (\RuntimeException $e) {
+            Response::json(['error' => $e->getMessage()], (int) $e->getCode() ?: 400);
+        }
+    }
+
+    public function removeCoInvestigator(array $params): void
+    {
+        try {
+            $this->auth->authenticate();
+            $this->auth->requireAuth();
+            $currentUser = $this->auth->getUser();
+
+            $feedbackId = $params['id'] ?? null;
+            $userId = $params['user_id'] ?? null;
+
+            if (!$feedbackId || !$userId) {
+                Response::json(['error' => 'Feedback ID and user ID are required.'], 422);
+                return;
+            }
+
+            $coInvestigators = $this->feedbackService->removeCoInvestigator(
+                $feedbackId, 
+                $userId, 
+                (string) ($currentUser['user_id'] ?? '')
+            );
+            Response::json(['data' => $coInvestigators, 'message' => 'Co-investigator removed successfully.']);
+        } catch (\RuntimeException $e) {
+            Response::json(['error' => $e->getMessage()], (int) $e->getCode() ?: 400);
+        }
+    }
+
+    public function getCoInvestigators(array $params): void
+    {
+        try {
+            $feedbackId = $params['id'] ?? null;
+
+            if (!$feedbackId) {
+                Response::json(['error' => 'Feedback ID is required.'], 422);
+                return;
+            }
+
+            $coInvestigators = $this->feedbackService->getCoInvestigators($feedbackId);
+            Response::json(['data' => $coInvestigators]);
+        } catch (\RuntimeException $e) {
+            Response::json(['error' => $e->getMessage()], (int) $e->getCode() ?: 400);
+        }
+    }
+
+    public function replaceCoInvestigators(array $params): void
+    {
+        try {
+            $this->auth->authenticate();
+            $this->auth->requireAuth();
+            $currentUser = $this->auth->getUser();
+
+            $feedbackId = $params['id'] ?? null;
+            $input = Request::input();
+            $userIds = $input['user_ids'] ?? [];
+
+            if (!$feedbackId || !is_array($userIds)) {
+                Response::json(['error' => 'Feedback ID and user IDs array are required.'], 422);
+                return;
+            }
+
+            $coInvestigators = $this->feedbackService->replaceCoInvestigators(
+                $feedbackId, 
+                $userIds, 
+                (string) ($currentUser['user_id'] ?? '')
+            );
+            Response::json(['data' => $coInvestigators, 'message' => 'Co-investigators updated successfully.']);
+        } catch (\RuntimeException $e) {
+            Response::json(['error' => $e->getMessage()], (int) $e->getCode() ?: 400);
         }
     }
 }

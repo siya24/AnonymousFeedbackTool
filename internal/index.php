@@ -17,6 +17,7 @@ use App\Controllers\Api\HrApiController;
 use App\Controllers\Api\HrCategoryApiController;
 use App\Controllers\Api\HrStatusApiController;
 use App\Controllers\Api\HrStageApiController;
+use App\Controllers\Api\HrRoleApiController;
 use App\Controllers\Web\PageController;
 use App\Core\Request;
 use App\Core\Router;
@@ -190,6 +191,8 @@ $router->add('GET', '/anonymized/reports', [PageController::class, 'hrReports'])
 $router->add('GET', '/hr/categories', [PageController::class, 'hrCategories']);
 $router->add('GET', '/hr/statuses', [PageController::class, 'hrStatuses']);
 $router->add('GET', '/hr/stages', [PageController::class, 'hrStages']);
+$router->add('GET', '/hr/roles', [PageController::class, 'hrRoles']);
+$router->add('GET', '/hr/personnel-roles', [PageController::class, 'hrPersonnelRoles']);
 
 $router->add('POST', '/api/hr/login', [HrApiController::class, 'login']);
 $router->add('POST', '/api/hr/logout', [HrApiController::class, 'logout']);
@@ -197,7 +200,15 @@ $router->add('GET', '/api/hr/me', [HrApiController::class, 'getCurrentUser']);
 $router->add('GET', '/api/hr/cases', [HrApiController::class, 'listCases']);
 $router->add('GET', '/api/hr/cases/{reference}', [HrApiController::class, 'caseDetail']);
 $router->add('POST', '/api/hr/cases/{reference}', [HrApiController::class, 'updateCase']);
+$router->add('GET', '/api/hr/cases/{id}/co-investigators', [FeedbackApiController::class, 'getCoInvestigators']);
+$router->add('POST', '/api/hr/cases/{id}/co-investigators', [FeedbackApiController::class, 'addCoInvestigator']);
+$router->add('DELETE', '/api/hr/cases/{id}/co-investigators/{user_id}', [FeedbackApiController::class, 'removeCoInvestigator']);
+$router->add('PUT', '/api/hr/cases/{id}/co-investigators', [FeedbackApiController::class, 'replaceCoInvestigators']);
 $router->add('GET', '/api/hr/personnel', [HrApiController::class, 'listAssignablePersonnel']);
+$router->add('POST', '/api/hr/personnel/sync-ad', [HrApiController::class, 'syncPersonnelFromAd']);
+$router->add('GET', '/api/hr/personnel-roles', [HrApiController::class, 'listPersonnelRoles']);
+$router->add('PUT', '/api/hr/personnel-roles/{id}', [HrApiController::class, 'updatePersonnelRoles']);
+$router->add('GET', '/api/hr/assignable-roles', [HrApiController::class, 'listAssignableRoles']);
 $router->add('GET', '/api/hr/dashboard/trends', [HrApiController::class, 'dashboardTrends']);
 $router->add('GET', '/api/hr/categories', [HrCategoryApiController::class, 'listAll']);
 $router->add('GET', '/api/hr/categories/{id}', [HrCategoryApiController::class, 'getById']);
@@ -214,5 +225,10 @@ $router->add('GET', '/api/hr/stages/{id}', [HrStageApiController::class, 'getByI
 $router->add('POST', '/api/hr/stages', [HrStageApiController::class, 'create']);
 $router->add('PUT', '/api/hr/stages/{id}', [HrStageApiController::class, 'update']);
 $router->add('DELETE', '/api/hr/stages/{id}', [HrStageApiController::class, 'delete']);
+$router->add('GET', '/api/hr/roles', [HrRoleApiController::class, 'listAll']);
+$router->add('GET', '/api/hr/roles/{id}', [HrRoleApiController::class, 'getById']);
+$router->add('POST', '/api/hr/roles', [HrRoleApiController::class, 'create']);
+$router->add('PUT', '/api/hr/roles/{id}', [HrRoleApiController::class, 'update']);
+$router->add('DELETE', '/api/hr/roles/{id}', [HrRoleApiController::class, 'delete']);
 
 $router->dispatch(Request::method(), Request::path());

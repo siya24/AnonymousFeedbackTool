@@ -93,7 +93,9 @@ function renderHrCasesTable(rows) {
     const body = rows.map((r) => {
         const reference = r.reference_no || '';
         const href = `/hr/cases/${encodeURIComponent(reference)}`;
-        const assignedTo = r.assigned_to_name ? `${r.assigned_to_name}${r.assigned_to_email ? ` (${r.assigned_to_email})` : ''}` : 'Unassigned';
+        const assignedTo = r.assigned_role_name
+            ? `Role: ${r.assigned_role_name}`
+            : (r.assigned_to_name ? `${r.assigned_to_name}${r.assigned_to_email ? ` (${r.assigned_to_email})` : ''}` : 'Unassigned');
         return `<tr>
             <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
             <td><strong>${reference}</strong></td>
@@ -372,8 +374,15 @@ function initHrCasePage() {
     const updateForm = byId('hr-update-form');
     const statusSelect = byId('status');
     const stageSelect = byId('stage');
-    const assigneeSelect = byId('assigned-to-user-id');
+    const assignedRoleSelect = byId('assigned-role-id');
+    const coInvestigatorsSelect = byId('co-investigator-select');
+    const addCoInvestigatorBtn = byId('add-co-investigator-btn');
+    const coInvestigatorsList = byId('co-investigators-list');
     const reference = (casePage.dataset.reference || '').trim();
+    let currentUserRole = '';
+    let currentCaseId = '';
+    let personnelList = [];
+    let currentCoInvestigators = [];
 
     if (!TokenManager.hasToken()) {
         window.location.href = buildHrLoginRedirectUrl();
@@ -385,13 +394,14 @@ function initHrCasePage() {
             return;
         }
 
+        currentCaseId = report.id || '';
         updateForm.priority.value = report.priority || 'Normal';
         if (stageSelect) {
             stageSelect.value = report.stage || 'Logged';
         }
         updateForm.status.value = report.status || 'Investigation pending';
-        if (assigneeSelect) {
-            assigneeSelect.value = report.assigned_to_user_id || '';
+        if (assignedRoleSelect) {
+            assignedRoleSelect.value = report.assigned_to_user_id || '';
         }
         updateForm.anonymized_summary.value = report.anonymized_summary || '';
         updateForm.action_taken.value = report.action_taken || '';
@@ -405,6 +415,7 @@ function initHrCasePage() {
         const created = report.created_at ? new Date(report.created_at).toLocaleString() : '';
         const acknowledged = report.acknowledged_at ? new Date(report.acknowledged_at).toLocaleString() : 'Not acknowledged';
         const assignedAt = report.assigned_at ? new Date(report.assigned_at).toLocaleString() : 'Not assigned';
+        const assignedEmail = report.assigned_to_email || 'Not assigned';
         const assignedTo = report.assigned_to_name
             ? `${report.assigned_to_name}${report.assigned_to_email ? ` (${report.assigned_to_email})` : ''}`
             : 'Unassigned';
@@ -418,11 +429,80 @@ function initHrCasePage() {
             <div class="col-md-6"><strong>Priority:</strong> ${report.priority || ''}</div>
             <div class="col-md-6"><strong>Created:</strong> ${created}</div>
             <div class="col-md-6"><strong>Acknowledged:</strong> ${acknowledged}</div>
-            <div class="col-md-6"><strong>Assigned To:</strong> ${escHtml(assignedTo)}</div>
+            <div class="col-md-6"><strong>Assigned Investigator:</strong> ${escHtml(assignedTo)}</div>
+            <div class="col-md-6"><strong>Investigator Email:</strong> ${escHtml(assignedEmail)}</div>
             <div class="col-md-6"><strong>Assigned At:</strong> ${assignedAt}</div>
             <div class="col-12"><strong>Description:</strong><div class="mt-1">${report.description || ''}</div></div>
             ${attachmentLinks ? `<div class="col-12"><strong>Attachments:</strong><div class="mt-1">${attachmentLinks}</div></div>` : ''}
         </div>`;
+    };
+
+    const renderCoInvestigatorsList = (coInvestigators) => {
+        currentCoInvestigators = coInvestigators || [];
+        if (!coInvestigators || coInvestigators.length === 0) {
+            coInvestigatorsList.innerHTML = '<p class="text-muted small mb-0">No co-investigators assigned.</p>';
+            return;
+        }
+
+        const items = coInvestigators.map(ci => `
+            <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                <div>
+                    <strong>${escHtml(ci.name || '')}</strong>
+                    ${ci.email ? `<br><small class="text-muted">${escHtml(ci.email)}</small>` : ''}
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger remove-co-investigator-btn" data-user-id="${ci.user_id}">
+                    <i class="fas fa-times me-1"></i>Remove
+                </button>
+            </div>
+        `).join('');
+
+        coInvestigatorsList.innerHTML = items;
+
+        coInvestigatorsList.querySelectorAll('.remove-co-investigator-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const userId = btn.dataset.userId;
+                if (!confirm('Remove this co-investigator?')) return;
+                try {
+                    await api(`${API_BASE}/hr/cases/${encodeURIComponent(currentCaseId)}/co-investigators/${encodeURIComponent(userId)}`, {
+                        method: 'DELETE'
+                    });
+                    showNotification('Co-investigator removed.', 'success');
+                    await loadCoInvestigators();
+                } catch (err) {
+                    showNotification(err.message, 'danger');
+                }
+            });
+        });
+    };
+
+    const setReadOnlyMode = (enabled) => {
+        if (!updateForm) {
+            return;
+        }
+
+        updateForm.querySelectorAll('input, select, textarea, button').forEach((el) => {
+            if (el.type === 'hidden') {
+                return;
+            }
+            el.disabled = enabled;
+        });
+
+        if (addCoInvestigatorBtn) {
+            addCoInvestigatorBtn.disabled = enabled;
+        }
+
+        if (enabled) {
+            hrOutput.classList.remove('d-none');
+            hrOutput.textContent = 'Ethics Office users can view case details but are not allowed to edit cases.';
+        } else {
+            hrOutput.classList.add('d-none');
+        }
+    };
+
+    const loadCurrentUser = async () => {
+        const me = await api(`${API_BASE}/hr/me`);
+        currentUserRole = String(me?.user?.role || '').toLowerCase();
+        setReadOnlyMode(currentUserRole === 'ethics');
     };
 
     const loadCase = async () => {
@@ -431,6 +511,37 @@ function initHrCasePage() {
         const attachments = data.data?.attachments || [];
         renderCaseSummary(detail, attachments);
         populateFormFromCase(detail);
+    };
+
+    const loadCoInvestigators = async () => {
+        if (!currentCaseId) return;
+        try {
+            const data = await api(`${API_BASE}/hr/cases/${encodeURIComponent(currentCaseId)}/co-investigators`);
+            renderCoInvestigatorsList(data.data || []);
+        } catch (err) {
+            console.error('Failed to load co-investigators:', err);
+        }
+    };
+
+    const loadPersonnel = async () => {
+        try {
+            const data = await api(`${API_BASE}/hr/personnel`);
+            personnelList = data.data || [];
+            populateCoInvestigatorSelect();
+        } catch (err) {
+            console.error('Failed to load personnel:', err);
+        }
+    };
+
+    const populateCoInvestigatorSelect = () => {
+        if (!coInvestigatorsSelect || !personnelList.length) {
+            return;
+        }
+
+        const opts = personnelList.map(p => 
+            `<option value="${escHtml(p.id || '')}">${escHtml(p.name || '')} (${escHtml(p.email || '')})</option>`
+        ).join('');
+        coInvestigatorsSelect.innerHTML = `<option value="">Add co-investigator...</option>${opts}`;
     };
 
     const loadStatuses = async () => {
@@ -449,22 +560,50 @@ function initHrCasePage() {
         }
     };
 
-    const loadAssignablePersonnel = async () => {
-        if (!assigneeSelect) {
+    const loadAssignableRoles = async () => {
+        if (!assignedRoleSelect) {
             return;
         }
         const data = await api(`${API_BASE}/hr/personnel`);
-        const opts = (data.data || []).map((u) => {
-            const label = `${u.name || u.email}${u.email ? ` (${u.email})` : ''}`;
-            return `<option value="${escHtml(u.id || '')}">${escHtml(label)}</option>`;
+        const opts = (data.data || []).map((person) => {
+            const title = (person.position_title || '').toString().trim();
+            const location = (person.office_location || '').toString().trim();
+            const suffixParts = [];
+            if (title) suffixParts.push(title);
+            if (location) suffixParts.push(location);
+            const suffix = suffixParts.length ? ` - ${suffixParts.join(', ')}` : '';
+            return `<option value="${escHtml(person.id || '')}">${escHtml(person.name || '')} (${escHtml(person.email || '')})${escHtml(suffix)}</option>`;
         }).join('');
-        assigneeSelect.innerHTML = `<option value="">Unassigned</option>${opts}`;
+        assignedRoleSelect.innerHTML = `<option value="">Unassigned</option>${opts}`;
     };
 
+    addCoInvestigatorBtn?.addEventListener('click', async () => {
+        const userId = coInvestigatorsSelect?.value?.trim();
+        if (!userId) {
+            showNotification('Please select a co-investigator.', 'warning');
+            return;
+        }
 
+        try {
+            await api(`${API_BASE}/hr/cases/${encodeURIComponent(currentCaseId)}/co-investigators`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId }),
+            });
+            showNotification('Co-investigator added successfully!', 'success');
+            coInvestigatorsSelect.value = '';
+            await loadCoInvestigators();
+        } catch (err) {
+            showNotification(err.message, 'danger');
+        }
+    });
 
     updateForm?.addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (currentUserRole === 'ethics') {
+            showNotification('Ethics Office cannot edit cases.', 'warning');
+            return;
+        }
         const formData = new FormData(updateForm);
         const ref = (formData.get('reference_no') || '').toString().trim();
         if (!ref) {
@@ -502,8 +641,9 @@ function initHrCasePage() {
 
     (async () => {
         try {
-            await Promise.all([loadStatuses(), loadStages(), loadAssignablePersonnel()]);
+            await Promise.all([loadCurrentUser(), loadStatuses(), loadStages(), loadAssignableRoles(), loadPersonnel()]);
             await loadCase();
+            await loadCoInvestigators();
         } catch (err) {
             summary.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${err.message}</div>`;
         }
@@ -989,6 +1129,226 @@ function initHrStages() {
     loadStages().catch(() => {});
 }
 
+function initHrRoles() {
+    const section = byId('hr-roles-section');
+    const roleTable = byId('role-table');
+    const addBtn = byId('role-add-btn');
+    const addForm = byId('role-add-form');
+    const saveBtn = byId('role-save-btn');
+    const cancelBtn = byId('role-cancel-btn');
+    const newName = byId('role-new-name');
+    const newOrder = byId('role-new-order');
+
+    if (!section) return;
+    if (!TokenManager.hasToken()) {
+        window.location.href = buildHrLoginRedirectUrl();
+        return;
+    }
+
+    let editingId = null;
+
+    const renderRoleTable = (roles) => {
+        if (!roles.length) {
+            roleTable.innerHTML = '<p class="text-muted">No roles yet.</p>';
+            return;
+        }
+
+        const rows = roles.map((r) => `
+          <tr>
+            <td>${escHtml(r.name)}</td>
+            <td>${r.sort_order}</td>
+            <td><span class="badge ${r.is_active ? 'bg-success' : 'bg-secondary'}">${r.is_active ? 'Active' : 'Inactive'}</span></td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary me-1 role-edit-btn" data-id="${r.id}" data-name="${escHtml(r.name)}" data-order="${r.sort_order}" data-active="${r.is_active}">
+                <i class="fas fa-edit"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-danger role-delete-btn" data-id="${r.id}" data-name="${escHtml(r.name)}">
+                <i class="fas fa-trash"></i>
+              </button>
+            </td>
+          </tr>`).join('');
+
+        roleTable.innerHTML = `<table class="table table-sm table-hover">
+          <thead><tr><th>Name</th><th>Sort Order</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${rows}</tbody></table>`;
+
+        roleTable.querySelectorAll('.role-edit-btn').forEach((btn) => btn.addEventListener('click', () => {
+            editingId = String(btn.dataset.id || '');
+            newName.value = btn.dataset.name;
+            newOrder.value = btn.dataset.order;
+            addForm.dataset.active = btn.dataset.active;
+            addForm.classList.remove('d-none');
+            saveBtn.textContent = 'Update';
+            newName.focus();
+        }));
+
+        roleTable.querySelectorAll('.role-delete-btn').forEach((btn) => btn.addEventListener('click', async () => {
+            if (!confirm(`Delete role "${btn.dataset.name}"? This cannot be undone.`)) return;
+            try {
+                await api(`${API_BASE}/hr/roles/${encodeURIComponent(btn.dataset.id)}`, { method: 'DELETE' });
+                showNotification('Role deleted.', 'success');
+                await loadRoles();
+            } catch (err) {
+                showNotification(err.message, 'danger');
+            }
+        }));
+    };
+
+    const loadRoles = async () => {
+        const data = await api(`${API_BASE}/hr/roles`);
+        renderRoleTable(data.data || []);
+    };
+
+    addBtn?.addEventListener('click', () => {
+        editingId = null;
+        newName.value = '';
+        newOrder.value = '0';
+        delete addForm.dataset.active;
+        addForm.classList.remove('d-none');
+        saveBtn.textContent = 'Save';
+        newName.focus();
+    });
+
+    cancelBtn?.addEventListener('click', () => {
+        addForm.classList.add('d-none');
+        editingId = null;
+    });
+
+    saveBtn?.addEventListener('click', async () => {
+        const name = newName.value.trim();
+        const order = parseInt(newOrder.value, 10) || 0;
+        if (!name) {
+            showNotification('Role name is required.', 'warning');
+            return;
+        }
+
+        try {
+            if (editingId) {
+                const isActive = addForm.dataset.active !== '0';
+                await api(`${API_BASE}/hr/roles/${encodeURIComponent(editingId)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, is_active: isActive, sort_order: order }),
+                });
+                showNotification('Role updated.', 'success');
+            } else {
+                await api(`${API_BASE}/hr/roles`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, sort_order: order }),
+                });
+                showNotification('Role created.', 'success');
+            }
+
+            addForm.classList.add('d-none');
+            editingId = null;
+            await loadRoles();
+        } catch (err) {
+            showNotification(err.message, 'danger');
+        }
+    });
+
+    loadRoles().catch(() => {});
+}
+
+function initHrPersonnelRoles() {
+    const section = byId('hr-personnel-roles-section');
+    const tableContainer = byId('personnel-roles-table');
+    const syncBtn = byId('sync-ad-personnel-btn');
+
+    if (!section) return;
+    if (!TokenManager.hasToken()) {
+        window.location.href = buildHrLoginRedirectUrl();
+        return;
+    }
+
+    const renderRows = (rows) => {
+        if (!rows.length) {
+            tableContainer.innerHTML = '<p class="text-muted">No personnel found. Use Sync from AD first.</p>';
+            return;
+        }
+
+        const body = rows.map((person) => {
+            return `<tr>
+                <td>
+                    <div class="fw-semibold">${escHtml(person.name || '')}</div>
+                    <div class="small text-muted">${escHtml(person.email || '')}</div>
+                    <div class="small text-muted">Emp #: ${escHtml(person.employee_number || '-')}</div>
+                </td>
+                <td>${escHtml(person.department_name || '-')}</td>
+                <td>${escHtml(person.position_title || '-')}</td>
+                <td>${escHtml(person.office_location || '-')}</td>
+                <td class="text-center">
+                    <input type="checkbox" class="form-check-input personnel-can-assign" data-id="${escHtml(person.id || '')}" ${person.can_assign_cases ? 'checked' : ''}>
+                </td>
+                <td>
+                    <button type="button" class="btn btn-sm personnel-save" style="background-color:#008AC4; border-color:#008AC4; color:#fff;" data-id="${escHtml(person.id || '')}">
+                        <i class="fas fa-save me-1"></i>Save
+                    </button>
+                </td>
+            </tr>`;
+        }).join('');
+
+        tableContainer.innerHTML = `<table class="table table-sm table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Department</th>
+                    <th>Position</th>
+                    <th>Location</th>
+                    <th>Can Assign Cases</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>${body}</tbody>
+        </table>`;
+
+        tableContainer.querySelectorAll('.personnel-save').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const id = btn.dataset.id;
+                const canAssign = tableContainer.querySelector(`.personnel-can-assign[data-id="${id}"]`);
+
+                try {
+                    await api(`${API_BASE}/hr/personnel-roles/${encodeURIComponent(id)}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            can_assign_cases: canAssign ? (canAssign.checked ? 1 : 0) : 0,
+                        }),
+                    });
+                    showNotification('Personnel roles updated.', 'success');
+                } catch (err) {
+                    showNotification(err.message, 'danger');
+                }
+            });
+        });
+    };
+
+    const loadPersonnelRoles = async () => {
+        const data = await api(`${API_BASE}/hr/personnel-roles`);
+        renderRows(data.data || []);
+    };
+
+    syncBtn?.addEventListener('click', async () => {
+        syncBtn.disabled = true;
+        tableContainer.innerHTML = '<p class="text-muted">Re-syncing from AD...</p>';
+        try {
+            const data = await api(`${API_BASE}/hr/personnel/sync-ad`, { method: 'POST' });
+            const processed = Number(data.processed || 0);
+            const reset = Number(data.reset || 0);
+            showNotification(`AD re-sync completed. ${processed} personnel record(s) processed, ${reset} reset.`, 'success');
+            await loadPersonnelRoles();
+        } catch (err) {
+            showNotification(err.message, 'danger');
+            await loadPersonnelRoles();
+        } finally {
+            syncBtn.disabled = false;
+        }
+    });
+
+    loadPersonnelRoles().catch(() => {});
+}
+
 function initNavAuth() {
     const hrConsoleItem = byId('nav-hr-console-item');
     const loginItem = byId('nav-hr-login-item');
@@ -1027,6 +1387,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initHrCategories();
     initHrStatuses();
     initHrStages();
+    initHrRoles();
+    initHrPersonnelRoles();
 });
 
 

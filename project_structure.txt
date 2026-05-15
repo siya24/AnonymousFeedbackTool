@@ -1,0 +1,210 @@
+﻿Folder PATH listing
+Volume serial number is 8019-CC50
+C:.
+|   .gitignore
+|   project_structure.txt
+|   README.md
+|   TECHNICAL_DESIGN.docx
+|   TECHNICAL_DESIGN.md
+|   
++---.github
+|   \---workflows
++---anonymous_feedback_private_uploads
+|       ac98ffa9263e38d7af6917b505444dbd.mp4
+|       adcedcaf86128d858d7df1b74f04dbf3.png
+|       
++---external
+|   |   .env
+|   |   .env.example
+|   |   .gitignore
+|   |   ARCHITECTURE.md
+|   |   favicon.ico
+|   |   index.php
+|   |   legal_aid_logo.png
+|   |   README.md
+|   |   
+|   +---app
+|   |   |   bootstrap.php
+|   |   |   
+|   |   +---Controllers
+|   |   |   +---Api
+|   |   |   |       CategoryApiController.php
+|   |   |   |       FeedbackApiController.php
+|   |   |   |       StatusApiController.php
+|   |   |   |       
+|   |   |   \---Web
+|   |   |           PageController.php
+|   |   |           
+|   |   +---Core
+|   |   |       Container.php
+|   |   |       Database.php
+|   |   |       Migration.php
+|   |   |       Request.php
+|   |   |       Response.php
+|   |   |       Router.php
+|   |   |       SmtpMailer.php
+|   |   |       
+|   |   +---Models
+|   |   |       Category.php
+|   |   |       Status.php
+|   |   |       
+|   |   +---Repositories
+|   |   |       CategoryRepository.php
+|   |   |       FeedbackRepository.php
+|   |   |       StatusRepository.php
+|   |   |       
+|   |   +---Services
+|   |   |       ClamAvMalwareScanner.php
+|   |   |       EmailTemplateRenderer.php
+|   |   |       FeedbackService.php
+|   |   |       MalwareScannerInterface.php
+|   |   |       NoOpMalwareScanner.php
+|   |   |       NotificationService.php
+|   |   |       
+|   |   \---Views
+|   |       +---emails
+|   |       |       notification.php
+|   |       |       
+|   |       +---layouts
+|   |       |       main.php
+|   |       |       
+|   |       \---pages
+|   |               home.php
+|   |               
+|   +---config
+|   |       app.php
+|   |       database.php
+|   |       
+|   +---data
+|   |       .gitkeep
+|   |       
+|   +---database
+|   |       schema.sql
+|   |       users.sql
+|   |       
+|   +---public
+|   |   |   favicon.ico
+|   |   |   
+|   |   +---api-docs
+|   |   \---assets
+|   |       |   request-lifecycle-flowchart.png
+|   |       |   
+|   |       +---css
+|   |       |       app.css
+|   |       |       
+|   |       \---js
+|   |               app.js
+|   |               
+|   +---scripts
+|   |       process_notifications.php
+|   |       
+|   \---uploads
+|           .gitkeep
+|           
++---internal
+|   |   .env
+|   |   .env.example
+|   |   .gitignore
+|   |   ARCHITECTURE.md
+|   |   favicon.ico
+|   |   index.php
+|   |   legal_aid_logo.png
+|   |   README.md
+|   |   
+|   +---app
+|   |   |   bootstrap.php
+|   |   |   
+|   |   +---Controllers
+|   |   |   +---Api
+|   |   |   |       CategoryApiController.php
+|   |   |   |       FeedbackApiController.php
+|   |   |   |       HrApiController.php
+|   |   |   |       HrCategoryApiController.php
+|   |   |   |       HrStageApiController.php
+|   |   |   |       HrStatusApiController.php
+|   |   |   |       StageApiController.php
+|   |   |   |       StatusApiController.php
+|   |   |   |       
+|   |   |   \---Web
+|   |   |           PageController.php
+|   |   |           
+|   |   +---Core
+|   |   |       Authorization.php
+|   |   |       Container.php
+|   |   |       Database.php
+|   |   |       JwtService.php
+|   |   |       Migration.php
+|   |   |       Request.php
+|   |   |       Response.php
+|   |   |       Router.php
+|   |   |       SmtpMailer.php
+|   |   |       
+|   |   +---Models
+|   |   |       Category.php
+|   |   |       Stage.php
+|   |   |       Status.php
+|   |   |       
+|   |   +---Repositories
+|   |   |       CategoryRepository.php
+|   |   |       FeedbackRepository.php
+|   |   |       StageRepository.php
+|   |   |       StatusRepository.php
+|   |   |       
+|   |   +---Services
+|   |   |       ClamAvMalwareScanner.php
+|   |   |       EmailTemplateRenderer.php
+|   |   |       FeedbackService.php
+|   |   |       LdapAuthService.php
+|   |   |       MalwareScannerInterface.php
+|   |   |       NoOpMalwareScanner.php
+|   |   |       NotificationService.php
+|   |   |       
+|   |   \---Views
+|   |       +---emails
+|   |       |       notification.php
+|   |       |       
+|   |       +---layouts
+|   |       |       main.php
+|   |       |       
+|   |       \---pages
+|   |               hr.php
+|   |               hr_case.php
+|   |               hr_categories.php
+|   |               hr_dashboard.php
+|   |               hr_reports.php
+|   |               hr_stages.php
+|   |               hr_statuses.php
+|   |               
+|   +---config
+|   |       app.php
+|   |       database.php
+|   |       
+|   +---data
+|   |       .gitkeep
+|   |       
+|   +---database
+|   |       schema.sql
+|   |       users.sql
+|   |       
+|   +---public
+|   |   |   favicon.ico
+|   |   |   
+|   |   +---api-docs
+|   |   \---assets
+|   |       |   request-lifecycle-flowchart.png
+|   |       |   
+|   |       +---css
+|   |       |       app.css
+|   |       |       
+|   |       \---js
+|   |               app.js
+|   |               
+|   +---scripts
+|   |       process_notifications.php
+|   |       
+|   \---uploads
+|           .gitkeep
+|           
+\---scripts
+        build_technical_design_docx.py
+        

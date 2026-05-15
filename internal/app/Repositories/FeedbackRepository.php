@@ -107,16 +107,39 @@ class FeedbackRepository {
             'SELECT r.*, s.name AS status,
                     COALESCE(r.category_other, c.name) AS category,
                     st.name AS stage,
+                    ar.name AS assigned_role_name,
                     assignee.name AS assigned_to_name,
                     assignee.email AS assigned_to_email
              FROM feedbacks r
              LEFT JOIN statuses s  ON s.id  = r.status_id
              LEFT JOIN categories c ON c.id = r.category_id
              LEFT JOIN stages st   ON st.id = r.stage_id
+             LEFT JOIN assignment_roles ar ON ar.id = r.assigned_role_id
              LEFT JOIN users assignee ON assignee.id = r.assigned_to_user_id
              WHERE r.reference_no = ?'
         );
         $stmt->execute([$reference]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $result ?: null;
+    }
+
+    public function findById(string $id): ?array {
+        $stmt = $this->pdo->prepare(
+            'SELECT r.*, s.name AS status,
+                    COALESCE(r.category_other, c.name) AS category,
+                    st.name AS stage,
+                    ar.name AS assigned_role_name,
+                    assignee.name AS assigned_to_name,
+                    assignee.email AS assigned_to_email
+             FROM feedbacks r
+             LEFT JOIN statuses s  ON s.id  = r.status_id
+             LEFT JOIN categories c ON c.id = r.category_id
+             LEFT JOIN stages st   ON st.id = r.stage_id
+             LEFT JOIN assignment_roles ar ON ar.id = r.assigned_role_id
+             LEFT JOIN users assignee ON assignee.id = r.assigned_to_user_id
+             WHERE r.id = ?'
+        );
+        $stmt->execute([$id]);
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
         return $result ?: null;
     }
@@ -130,10 +153,11 @@ class FeedbackRepository {
         }
 
         return [
-            'report'      => $report,
-            'updates'     => $this->getReportUpdates((string) $report['id']),
-            'attachments' => $this->getReportAttachments((string) $report['id']),
-            'audit'       => $this->getReportAudit($reference),
+            'report'           => $report,
+            'updates'          => $this->getReportUpdates((string) $report['id']),
+            'attachments'      => $this->getReportAttachments((string) $report['id']),
+            'audit'            => $this->getReportAudit($reference),
+            'co_investigators' => $this->getCoInvestigators((string) $report['id']),
         ];
     }
 
@@ -169,16 +193,18 @@ class FeedbackRepository {
         $query = 'SELECT r.*, s.name AS status,
                          COALESCE(r.category_other, c.name) AS category,
                          st.name AS stage,
+                         ar.name AS assigned_role_name,
                          assignee.name AS assigned_to_name,
                          assignee.email AS assigned_to_email
                   FROM feedbacks r
                   LEFT JOIN statuses s   ON s.id  = r.status_id
                   LEFT JOIN categories c ON c.id  = r.category_id
                   LEFT JOIN stages st    ON st.id = r.stage_id
+                  LEFT JOIN assignment_roles ar ON ar.id = r.assigned_role_id
                   LEFT JOIN users assignee ON assignee.id = r.assigned_to_user_id';
         $query .= $this->buildCaseWhereClause($filters, $params);
 
-        $allowedSortBy = ['created_at', 'category', 'status', 'stage', 'reference_no', 'priority', 'assigned_to'];
+        $allowedSortBy = ['created_at', 'category', 'status', 'stage', 'reference_no', 'priority', 'assigned_to', 'assigned_role'];
         $sortBy = in_array($filters['sort_by'] ?? 'created_at', $allowedSortBy, true)
             ? (string) $filters['sort_by']
             : 'created_at';
@@ -192,6 +218,7 @@ class FeedbackRepository {
             'reference_no' => 'r.reference_no',
             'priority'     => 'r.priority',
             'assigned_to'  => 'assignee.name',
+            'assigned_role'=> 'ar.name',
         ];
         $query .= ' ORDER BY ' . ($sortColumnMap[$sortBy] ?? 'r.created_at') . ' ' . $sortOrder;
 
@@ -223,16 +250,18 @@ class FeedbackRepository {
         $query = 'SELECT r.*, s.name AS status,
                          COALESCE(r.category_other, c.name) AS category,
                     st.name AS stage,
+                                        ar.name AS assigned_role_name,
                     assignee.name AS assigned_to_name,
                     assignee.email AS assigned_to_email
                   FROM feedbacks r
                   LEFT JOIN statuses s   ON s.id  = r.status_id
                   LEFT JOIN categories c ON c.id  = r.category_id
                 LEFT JOIN stages st    ON st.id = r.stage_id
+                                LEFT JOIN assignment_roles ar ON ar.id = r.assigned_role_id
                 LEFT JOIN users assignee ON assignee.id = r.assigned_to_user_id';
         $query .= $this->buildCaseWhereClause($filters, $params);
 
-         $allowedSortBy = ['created_at', 'category', 'status', 'stage', 'reference_no', 'priority', 'assigned_to'];
+                 $allowedSortBy = ['created_at', 'category', 'status', 'stage', 'reference_no', 'priority', 'assigned_to', 'assigned_role'];
         $sortBy = in_array($filters['sort_by'] ?? 'created_at', $allowedSortBy, true)
             ? (string) $filters['sort_by']
             : 'created_at';
@@ -246,6 +275,7 @@ class FeedbackRepository {
             'reference_no' => 'r.reference_no',
             'priority'     => 'r.priority',
             'assigned_to'  => 'assignee.name',
+            'assigned_role'=> 'ar.name',
         ];
         $query .= ' ORDER BY ' . ($sortColumnMap[$sortBy] ?? 'r.created_at') . ' ' . $sortOrder;
         $query .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) $offset;
@@ -292,7 +322,7 @@ class FeedbackRepository {
     
     public function updateReport(string $reference, array $data, ?string $updatedByUserId = null): bool {
         $allowed = ['priority', 'stage', 'status', 'anonymized_summary', 'action_taken',
-                    'outcome_comments', 'internal_notes', 'acknowledged_at', 'assigned_to_user_id', 'assigned_at'];
+                    'outcome_comments', 'internal_notes', 'acknowledged_at', 'assigned_to_user_id', 'assigned_role_id', 'assigned_at'];
 
         $updates = [];
         $params  = [];
@@ -307,6 +337,9 @@ class FeedbackRepository {
                     $params[]  = $this->getStageIdByName((string) $value);
                 } elseif ($key === 'assigned_to_user_id') {
                     $updates[] = 'assigned_to_user_id = ?';
+                    $params[]  = ($value === '' || $value === null) ? null : $value;
+                } elseif ($key === 'assigned_role_id') {
+                    $updates[] = 'assigned_role_id = ?';
                     $params[]  = ($value === '' || $value === null) ? null : $value;
                 } else {
                     $updates[] = "$key = ?";
@@ -332,13 +365,24 @@ class FeedbackRepository {
     public function listAssignablePersonnel(): array
     {
         $stmt = $this->pdo->prepare(
-            "SELECT id, name, email, role
+                        "SELECT id, name, email, role, department_name, position_title, office_location
              FROM users
              WHERE is_active = 1
                AND role IN ('hr', 'officer', 'manager')
              ORDER BY name ASC, email ASC"
         );
         $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function listAssignableRoles(): array
+    {
+        $stmt = $this->pdo->query(
+            'SELECT id, name, sort_order
+             FROM assignment_roles
+             WHERE is_active = 1
+             ORDER BY sort_order ASC, name ASC'
+        );
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -505,5 +549,85 @@ class FeedbackRepository {
              ORDER BY open_cases DESC, total_cases DESC'
         );
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // ========== Co-Investigator Methods ==========
+
+    public function addCoInvestigator(string $feedbackId, string $userId, ?string $addedByUserId = null): bool {
+        $id = self::generateUuid();
+
+        try {
+            $stmt = $this->pdo->prepare(
+                'INSERT INTO feedback_co_investigators (id, feedback_id, user_id, added_at, added_by_user_id)
+                 VALUES (?, ?, ?, NOW(), ?)'
+            );
+            return $stmt->execute([$id, $feedbackId, $userId, $addedByUserId]);
+        } catch (\PDOException $e) {
+            // Unique constraint violation (already a co-investigator)
+            if ($e->getCode() === '23000') {
+                return false;
+            }
+            throw $e;
+        }
+    }
+
+    public function removeCoInvestigator(string $feedbackId, string $userId): bool {
+        $stmt = $this->pdo->prepare(
+            'DELETE FROM feedback_co_investigators
+             WHERE feedback_id = ? AND user_id = ?'
+        );
+        return $stmt->execute([$feedbackId, $userId]);
+    }
+
+    public function getCoInvestigators(string $feedbackId): array {
+        $stmt = $this->pdo->prepare(
+            'SELECT fci.id, fci.user_id, u.name, u.email, u.role, fci.added_at, 
+                    added_by_user.name AS added_by_name
+             FROM feedback_co_investigators fci
+             LEFT JOIN users u ON u.id = fci.user_id
+             LEFT JOIN users added_by_user ON added_by_user.id = fci.added_by_user_id
+             WHERE fci.feedback_id = ?
+             ORDER BY fci.added_at ASC'
+        );
+        $stmt->execute([$feedbackId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function isCoInvestigator(string $feedbackId, string $userId): bool {
+        $stmt = $this->pdo->prepare(
+            'SELECT 1 FROM feedback_co_investigators
+             WHERE feedback_id = ? AND user_id = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$feedbackId, $userId]);
+        return (bool) $stmt->fetchColumn();
+    }
+
+    public function canUserAccessFeedback(string $feedbackId, string $userId): bool {
+        $stmt = $this->pdo->prepare(
+            'SELECT 1 FROM feedbacks
+             WHERE id = ? AND (assigned_to_user_id = ? OR id IN (
+                SELECT feedback_id FROM feedback_co_investigators WHERE user_id = ?
+             ))
+             LIMIT 1'
+        );
+        $stmt->execute([$feedbackId, $userId, $userId]);
+        return (bool) $stmt->fetchColumn();
+    }
+
+    public function removeAllCoInvestigators(string $feedbackId): bool {
+        $stmt = $this->pdo->prepare(
+            'DELETE FROM feedback_co_investigators WHERE feedback_id = ?'
+        );
+        return $stmt->execute([$feedbackId]);
+    }
+
+    public function getUserById(string $userId): ?array {
+        $stmt = $this->pdo->prepare(
+            'SELECT id, name, email FROM users WHERE id = ? LIMIT 1'
+        );
+        $stmt->execute([$userId]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $result ?: null;
     }
 }

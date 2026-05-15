@@ -339,19 +339,62 @@ final class HrApiController
             $name = trim((string) ($profile['username'] ?? $identifier));
         }
 
+        $adUsername = trim((string) ($profile['username'] ?? ''));
+        $firstName = trim((string) ($profile['first_name'] ?? ''));
+        $lastName = trim((string) ($profile['last_name'] ?? ''));
+        $employeeNumber = trim((string) ($profile['employee_number'] ?? ''));
+        $departmentName = trim((string) ($profile['department'] ?? ''));
+        $positionTitle = trim((string) ($profile['title'] ?? ''));
+        $officeLocation = trim((string) ($profile['location'] ?? ''));
+
         
         $placeholderHash = password_hash(bin2hex(random_bytes(16)), PASSWORD_BCRYPT);
 
         $upsert = $this->db->prepare(
-            'INSERT INTO users (id, name, email, password_hash, role, is_active, created_at, updated_at)
-             VALUES (UUID(), ?, ?, ?, ?, 1, NOW(), NOW())
+            'INSERT INTO users (
+                id,
+                name,
+                first_name,
+                last_name,
+                email,
+                ad_username,
+                password_hash,
+                role,
+                employee_number,
+                department_name,
+                position_title,
+                office_location,
+                is_active,
+                created_at,
+                updated_at
+            )
+             VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
              ON DUPLICATE KEY UPDATE
                  name = VALUES(name),
+                 first_name = VALUES(first_name),
+                 last_name = VALUES(last_name),
+                 ad_username = VALUES(ad_username),
                  role = VALUES(role),
+                 employee_number = VALUES(employee_number),
+                 department_name = VALUES(department_name),
+                 position_title = VALUES(position_title),
+                 office_location = VALUES(office_location),
                  is_active = VALUES(is_active),
                  updated_at = NOW()'
         );
-        $upsert->execute([$name, $email, $placeholderHash, $role]);
+        $upsert->execute([
+            $name,
+            $firstName,
+            $lastName,
+            $email,
+            $adUsername,
+            $placeholderHash,
+            $role,
+            $employeeNumber,
+            $departmentName,
+            $positionTitle,
+            $officeLocation,
+        ]);
 
         $find = $this->db->prepare('SELECT id, name, email, password_hash, role FROM users WHERE email = ? AND is_active = 1');
         $find->execute([$email]);
@@ -469,6 +512,10 @@ final class HrApiController
             $userId = $user['user_id'] ?? 'unknown';
             $userName = (string) ($user['name'] ?? 'HR user');
 
+            if ($this->isAssignmentChangeRequested($reference, $payload) && !$this->userCanAssignCases((string) $userId)) {
+                throw new \RuntimeException('You do not have authority to assign cases.', 403);
+            }
+
             
             $result = $this->feedbackService->updateCaseForHr($reference, $payload, (string) $userId, $userName);
             Response::json($result);
@@ -527,6 +574,234 @@ final class HrApiController
             $code = (int) ($e->getCode() ?: 400);
             Response::json(['error' => $e->getMessage()], $code);
         }
+    }
+
+    public function listAssignableRoles(array $params = []): void
+    {
+        try {
+            $this->auth->authenticate();
+            $this->auth->requireAnyRole(Authorization::CONSOLE_ROLES);
+
+            $rows = $this->feedbackService->listAssignableRoles();
+            Response::json(['data' => $rows]);
+        } catch (\RuntimeException $e) {
+            $code = (int) ($e->getCode() ?: 400);
+            Response::json(['error' => $e->getMessage()], $code);
+        }
+    }
+
+    public function syncPersonnelFromAd(array $params = []): void
+    {
+        try {
+            $this->auth->authenticate();
+            $this->auth->requireAnyRole(Authorization::CONFIG_ROLES);
+
+            $personnel = $this->ldapAuthService->fetchHrPersonnel();
+            if ($personnel === []) {
+                throw new \RuntimeException('No HR personnel returned from Active Directory. Check LDAP configuration.', 400);
+            }
+
+            $placeholderHash = password_hash(bin2hex(random_bytes(16)), PASSWORD_BCRYPT);
+            $upsert = $this->db->prepare(
+                'INSERT INTO users (
+                    id,
+                    name,
+                    first_name,
+                    last_name,
+                    email,
+                    ad_username,
+                    password_hash,
+                    role,
+                    employee_number,
+                    department_name,
+                    position_title,
+                    office_location,
+                    is_active,
+                    created_at,
+                    updated_at
+                ) VALUES (
+                    UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW()
+                )
+                ON DUPLICATE KEY UPDATE
+                    name = VALUES(name),
+                    first_name = VALUES(first_name),
+                    last_name = VALUES(last_name),
+                    ad_username = VALUES(ad_username),
+                    employee_number = VALUES(employee_number),
+                    department_name = VALUES(department_name),
+                    position_title = VALUES(position_title),
+                    office_location = VALUES(office_location),
+                    is_active = 1,
+                    updated_at = NOW()'
+            );
+
+            $resetStmt = $this->db->prepare(
+                "UPDATE users
+                 SET is_active = 0,
+                     first_name = NULL,
+                     last_name = NULL,
+                     employee_number = NULL,
+                     department_name = NULL,
+                     position_title = NULL,
+                     office_location = NULL,
+                     updated_at = NOW()
+                 WHERE role = 'hr'
+                   AND ad_username IS NOT NULL
+                   AND ad_username <> ''"
+            );
+
+            $this->db->beginTransaction();
+            $resetStmt->execute();
+            $resetCount = $resetStmt->rowCount();
+
+            $processed = 0;
+            foreach ($personnel as $person) {
+                $email = strtolower(trim((string) ($person['email'] ?? '')));
+                if ($email === '') {
+                    $username = trim((string) ($person['username'] ?? ''));
+                    if ($username !== '') {
+                        $email = $username . '@' . strtolower((string) ($this->config['ldap_host'] ?? ''));
+                    }
+                }
+                if ($email === '') {
+                    continue;
+                }
+
+                $upsert->execute([
+                    (string) ($person['name'] ?? ''),
+                    (string) ($person['first_name'] ?? ''),
+                    (string) ($person['last_name'] ?? ''),
+                    $email,
+                    (string) ($person['username'] ?? ''),
+                    $placeholderHash,
+                    Authorization::ROLE_HR,
+                    (string) ($person['employee_number'] ?? ''),
+                    (string) ($person['department_name'] ?? ''),
+                    (string) ($person['position_title'] ?? ''),
+                    (string) ($person['office_location'] ?? ''),
+                ]);
+                $processed++;
+            }
+
+            $this->db->commit();
+
+            Response::json([
+                'message' => 'Active Directory personnel re-sync completed.',
+                'reset' => $resetCount,
+                'processed' => $processed,
+            ]);
+        } catch (\RuntimeException $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            $code = (int) ($e->getCode() ?: 400);
+            Response::json(['error' => $e->getMessage()], $code);
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            Response::json(['error' => 'Failed to re-sync Active Directory personnel.'], 500);
+        }
+    }
+
+    public function listPersonnelRoles(array $params = []): void
+    {
+        try {
+            $this->auth->authenticate();
+            $this->auth->requireAnyRole(Authorization::CONFIG_ROLES);
+
+            $stmt = $this->db->query(
+                "SELECT id, name, first_name, last_name, email, role, employee_number, department_name, position_title, office_location, can_assign_cases, is_active
+                 FROM users
+                 WHERE role IN ('hr', 'manager', 'officer', 'ethics')
+                 ORDER BY name ASC, email ASC"
+            );
+
+            Response::json(['data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+        } catch (\RuntimeException $e) {
+            $code = (int) ($e->getCode() ?: 400);
+            Response::json(['error' => $e->getMessage()], $code);
+        }
+    }
+
+    public function updatePersonnelRoles(array $params = []): void
+    {
+        try {
+            $this->auth->authenticate();
+            $this->auth->requireAnyRole(Authorization::CONFIG_ROLES);
+
+            $userId = trim((string) ($params['id'] ?? ''));
+            if ($userId === '') {
+                throw new \RuntimeException('Personnel id is required.', 400);
+            }
+
+            $payload = Request::input();
+            $canAssignCases = (int) (!empty($payload['can_assign_cases']) ? 1 : 0);
+
+            $stmt = $this->db->prepare(
+                'UPDATE users
+                 SET can_assign_cases = ?,
+                     updated_at = NOW()
+                 WHERE id = ?'
+            );
+            $stmt->execute([$canAssignCases, $userId]);
+
+            Response::json(['message' => 'Personnel roles updated successfully.']);
+        } catch (\RuntimeException $e) {
+            $code = (int) ($e->getCode() ?: 400);
+            Response::json(['error' => $e->getMessage()], $code);
+        }
+    }
+
+    private function isAssignmentChangeRequested(string $reference, array $payload): bool
+    {
+        if (!array_key_exists('assigned_to_user_id', $payload) && !array_key_exists('assigned_role_id', $payload)) {
+            return false;
+        }
+
+        $stmt = $this->db->prepare(
+            'SELECT assigned_to_user_id, assigned_role_id
+             FROM feedbacks
+             WHERE reference_no = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$reference]);
+        $current = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        if (array_key_exists('assigned_to_user_id', $payload)) {
+            $incoming = trim((string) ($payload['assigned_to_user_id'] ?? ''));
+            $existing = trim((string) ($current['assigned_to_user_id'] ?? ''));
+            if ($incoming !== $existing) {
+                return true;
+            }
+        }
+
+        if (array_key_exists('assigned_role_id', $payload)) {
+            $incoming = trim((string) ($payload['assigned_role_id'] ?? ''));
+            $existing = trim((string) ($current['assigned_role_id'] ?? ''));
+            if ($incoming !== $existing) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function userCanAssignCases(string $userId): bool
+    {
+        if ($userId === '' || $userId === 'unknown') {
+            return false;
+        }
+
+        $stmt = $this->db->prepare(
+            'SELECT can_assign_cases
+             FROM users
+             WHERE id = ? AND is_active = 1
+             LIMIT 1'
+        );
+        $stmt->execute([$userId]);
+
+        return ((int) ($stmt->fetchColumn() ?: 0)) === 1;
     }
 }
 

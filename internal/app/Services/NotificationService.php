@@ -239,6 +239,94 @@ class NotificationService
         }
     }
 
+    public function notifyCoInvestigatorAdded(
+        string $feedbackId,
+        string $reference,
+        string $category,
+        string $recipientEmail,
+        string $coInvestigatorName,
+        string $addedByName
+    ): void {
+        if (!$this->immediateNotificationsEnabled) {
+            return;
+        }
+
+        $recipient = trim($recipientEmail);
+        if ($this->isDisallowedRecipient($recipient)) {
+            return;
+        }
+
+        $caseUrl = $this->baseUrl . '/hr/cases/' . urlencode($reference);
+        $subject = "You have been added as co-investigator ({$reference})";
+        $plain = "You have been added as a co-investigator on a feedback case.\n\n"
+            . "Reference: {$reference}\n"
+            . "Category:  {$category}\n"
+            . "Co-investigator: {$coInvestigatorName}\n"
+            . "Added by: {$addedByName}\n\n"
+            . "Review the case:\n{$caseUrl}";
+        $html = $this->templateRenderer->renderNotification([
+            'title' => 'Added as Co-Investigator',
+            'badge' => 'CO-INVESTIGATOR',
+            'badgeColor' => '#6f42c1',
+            'reference' => $reference,
+            'category' => $category,
+            'message' => "You have been added as a co-investigator on this case by {$addedByName}. You can now access and work on this case with the primary investigator.",
+            'caseUrl' => $caseUrl,
+            'ctaLabel' => 'View Case',
+            'submittedAt' => '',
+        ]);
+
+        $recipients = $this->applyDevOverride([$recipient]);
+        foreach ($recipients as $target) {
+            $this->mailer->sendHtml($target, $subject, $html, $plain);
+            $this->repository->logNotification($feedbackId, 'co_investigator_added', $target);
+        }
+    }
+
+    public function notifyCoInvestigatorRemoved(
+        string $feedbackId,
+        string $reference,
+        string $category,
+        string $recipientEmail,
+        string $coInvestigatorName,
+        string $removedByName
+    ): void {
+        if (!$this->immediateNotificationsEnabled) {
+            return;
+        }
+
+        $recipient = trim($recipientEmail);
+        if ($this->isDisallowedRecipient($recipient)) {
+            return;
+        }
+
+        $caseUrl = $this->baseUrl . '/hr/cases/' . urlencode($reference);
+        $subject = "You have been removed as co-investigator ({$reference})";
+        $plain = "You have been removed as a co-investigator on a feedback case.\n\n"
+            . "Reference: {$reference}\n"
+            . "Category:  {$category}\n"
+            . "Co-investigator: {$coInvestigatorName}\n"
+            . "Removed by: {$removedByName}\n\n"
+            . "View case details:\n{$caseUrl}";
+        $html = $this->templateRenderer->renderNotification([
+            'title' => 'Removed as Co-Investigator',
+            'badge' => 'REMOVED',
+            'badgeColor' => '#9d2722',
+            'reference' => $reference,
+            'category' => $category,
+            'message' => "You have been removed as a co-investigator on this case by {$removedByName}.",
+            'caseUrl' => $caseUrl,
+            'ctaLabel' => 'View Case',
+            'submittedAt' => '',
+        ]);
+
+        $recipients = $this->applyDevOverride([$recipient]);
+        foreach ($recipients as $target) {
+            $this->mailer->sendHtml($target, $subject, $html, $plain);
+            $this->repository->logNotification($feedbackId, 'co_investigator_removed', $target);
+        }
+    }
+
     public function processScheduledNotifications(): array
     {
         if (!$this->scheduledNotificationsEnabled) {

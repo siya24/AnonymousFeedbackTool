@@ -78,6 +78,7 @@ App\Core\Container::set('feedbackRepository', new App\Repositories\FeedbackRepos
 App\Core\Container::set('categoryRepository', new App\Repositories\CategoryRepository($db));
 App\Core\Container::set('statusRepository', new App\Repositories\StatusRepository($db));
 App\Core\Container::set('stageRepository', new App\Repositories\StageRepository($db));
+App\Core\Container::set('assignmentRoleRepository', new App\Repositories\AssignmentRoleRepository($db));
 App\Core\Container::set('ldapAuthService', new App\Services\LdapAuthService($config['app']));
 App\Core\Container::set('emailTemplateRenderer', new App\Services\EmailTemplateRenderer(
     __DIR__ . '/Views/emails'

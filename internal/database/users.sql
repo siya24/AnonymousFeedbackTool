@@ -38,3 +38,9 @@ INSERT IGNORE INTO stages (id, name, is_active, sort_order, created_at, updated_
 (UUID(), 'Resolved',          1, 5, NOW(), NOW()),
 (UUID(), 'Closed',            1, 6, NOW(), NOW());
 
+-- Seed default assignment roles
+INSERT IGNORE INTO assignment_roles (id, name, is_active, sort_order, created_at, updated_at) VALUES
+(UUID(), 'HR Investigator', 1, 1, NOW(), NOW()),
+(UUID(), 'Case Manager',    1, 2, NOW(), NOW()),
+(UUID(), 'Compliance Lead', 1, 3, NOW(), NOW());
+

@@ -55,11 +55,31 @@
                 </div>
 
                 <div class="mb-3">
-                    <label for="assigned-to-user-id" class="form-label"><i class="fas fa-user-check me-1"></i>Assigned Investigator</label>
-                    <select id="assigned-to-user-id" name="assigned_to_user_id" class="form-select">
-                        <option value="">Unassigned</option>
+                    <label for="assigned-role-id" class="form-label"><i class="fas fa-user-tie me-1"></i>Assigned Investigator(s)</label>
+                    <select id="assigned-role-id" name="assigned_to_user_id" class="form-select">
+                        <option value="">Select Investigator</option>
                     </select>
-                    <div class="form-text">Assign this case to HR personnel responsible for investigation.</div>
+                    <div class="form-text">Assign this case to an investigator. Co-investigators can be added below to work alongside the primary investigator.</div>
+                </div>
+
+                <div class="mb-3">
+                    <fieldset>
+                        <legend class="form-label"><i class="fas fa-users me-1"></i>Co-Investigators</legend>
+                        <div id="co-investigators-container" class="card border-light mb-2">
+                            <div id="co-investigators-list" class="card-body">
+                                <p class="text-muted small mb-0">No co-investigators assigned.</p>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <select id="co-investigator-select" class="form-select">
+                                <option value="">Add co-investigator...</option>
+                            </select>
+                            <button type="button" id="add-co-investigator-btn" class="btn btn-outline-primary">
+                                <i class="fas fa-plus me-1"></i>Add
+                            </button>
+                        </div>
+                        <div class="form-text">Add additional investigators to work on this case alongside the primary investigator.</div>
+                    </fieldset>
                 </div>
 
                 <div class="mb-3">
