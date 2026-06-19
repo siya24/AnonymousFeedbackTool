@@ -31,17 +31,25 @@ Thumbs.db
 # Node (if frontend assets are added)
 node_modules/
 
-# Project documents kept locally
-Functional Requirements Document - Anonymous Feedback_V0.1.docx
-User Story Anonymous Feedback tool140925.docx
+# Monorepo app runtime data
+internal/data/*.sqlite
+internal/data/.app_key
+internal/uploads/*
+!internal/uploads/.gitkeep
+!internal/data/.gitkeep
 
-# Runtime application data
-data/*.sqlite
-data/.app_key
-uploads/*
-!uploads/.gitkeep
-!data/.gitkeep
+external/data/*.sqlite
+external/data/.app_key
+external/uploads/*
+!external/uploads/.gitkeep
+!external/data/.gitkeep
 
-# Temporary extraction folder
-.tmp_req/
-login_test.ps1
+# Root private upload storage
+anonymous_feedback_private_uploads/
+
+# Python build artifacts
+**/__pycache__/
+*.pyc
+
+# Temporary Office lock files
+~$*.docx

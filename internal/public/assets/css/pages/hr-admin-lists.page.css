@@ -1,0 +1,17 @@
+#cat-table,
+#status-table,
+#stage-table,
+#role-table,
+#user-table,
+#personnel-roles-table {
+    min-height: 72px;
+}
+
+#cat-table .btn,
+#status-table .btn,
+#stage-table .btn,
+#role-table .btn,
+#user-table .btn,
+#personnel-roles-table .btn {
+    min-width: 36px;
+}

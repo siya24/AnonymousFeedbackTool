@@ -1,0 +1,7 @@
+#hr-case-summary .list-group-item {
+    border-left: 3px solid #008ac4;
+}
+
+#co-investigators-list .border-bottom:last-child {
+    border-bottom: 0 !important;
+}

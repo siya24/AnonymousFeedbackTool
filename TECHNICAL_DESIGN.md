@@ -1,8 +1,8 @@
-# Anonymous Feedback Tool — Technical Design Document
+﻿# Anonymous Feedback Tool — Technical Design Document
 
-**Version:** 1.0  
-**Date:** April 28, 2026  
-**Status:** Current
+**Version:** 1.1  
+**Date:** May 6, 2026  
+**Status:** Updated
 
 ---
 
@@ -38,42 +38,41 @@ The Anonymous Feedback Tool is a web application that enables employees to submi
 The application follows a lightweight custom **MVC** pattern without any framework or package manager.
 
 ```
-index.php               ← Front controller: bootstraps, registers routes, dispatches
+index.php                <-  Front controller: bootstraps, registers routes, dispatches
 app/
-  bootstrap.php         ← Autoloader, .env loader, security headers, DI container setup
+  bootstrap.php          <-  Autoloader, .env loader, security headers, DI container setup
   Core/
-    Router.php          ← HTTP method + path matching, named parameter extraction
-    Request.php         ← Input abstraction (JSON body, POST, query string, method)
-    Response.php        ← JSON response helper
-    Container.php       ← Simple service locator / dependency injection container
-    Database.php        ← PDO factory — creates database if not exists, returns PDO
-    Migration.php       ← Idempotent schema migration runner (runs on every request)
-    JwtService.php      ← JWT encode/decode/verify (HS256, HMAC-SHA256)
-    Authorization.php   ← Bearer token extraction and role-based access
-    SmtpMailer.php      ← Native SMTP over stream sockets (STARTTLS + SMTPS)
+    Router.php           <-  HTTP method + path matching, named parameter extraction
+    Request.php          <-  Input abstraction (JSON body, POST, query string, method)
+    Response.php         <-  JSON response helper
+    Container.php        <-  Simple service locator / dependency injection container
+    Database.php         <-  PDO factory — creates database if not exists, returns PDO
+    Migration.php        <-  Idempotent schema migration runner (runs on every request)
+    JwtService.php       <-  JWT encode/decode/verify (HS256, HMAC-SHA256)
+    Authorization.php    <-  Bearer token extraction and role-based access
+    SmtpMailer.php       <-  Native SMTP over stream sockets (STARTTLS + SMTPS)
   Controllers/
-    Api/                ← Stateless JSON API controllers
-    Web/                ← Page controllers (render HTML views)
-  Models/               ← Plain value objects with fromRow()/toArray()
-  Repositories/         ← All SQL queries, PDO interactions
-  Services/             ← Business logic (FeedbackService, NotificationService, LdapAuthService)
+    Api/                 <-  Stateless JSON API controllers
+    Web/                 <-  Page controllers (render HTML views)
+  Models/                <-  Plain value objects with fromRow()/toArray()
+  Repositories/          <-  All SQL queries, PDO interactions
+  Services/              <-  Business logic (FeedbackService, NotificationService, LdapAuthService)
   Views/
-    layouts/main.php    ← Shared HTML shell, Bootstrap, navigation
-    pages/              ← Page-level PHP view templates
-    emails/             ← HTML email templates
+    layouts/main.php     <-  Shared HTML shell, Bootstrap, navigation
+    pages/               <-  Page-level PHP view templates
+    emails/              <-  HTML email templates
 config/
-  app.php               ← All application config (reads from environment variables)
-  database.php          ← Database connection config (reads from environment variables)
+  app.php                <-  All application config (reads from environment variables)
+  database.php           <-  Database connection config (reads from environment variables)
 database/
-  schema.sql            ← Full DDL — CREATE TABLE IF NOT EXISTS for all tables
-  users.sql             ← Default HR user seed data and default category seed data
+  schema.sql             <-  Full DDL — CREATE TABLE IF NOT EXISTS for all tables
+  users.sql              <-  Default HR user seed data and default category seed data
 scripts/
-  process_notifications.php  ← CLI script run by cron for scheduled notifications
+  process_notifications.php   <-  CLI script run by cron for scheduled notifications
 public/
-  assets/css/app.css    ← Stylesheet
-  assets/js/app.js      ← All frontend JavaScript
-  api-docs/openapi.json ← OpenAPI 3.0 specification
-uploads/                ← Uploaded attachment files (not web-accessible directly)
+  assets/css/app.css     <-  Stylesheet
+  assets/js/app.js       <-  All frontend JavaScript
+anonymous_feedback_private_uploads/ <- Private attachment storage (not web-accessible directly)
 ```
 
 ---
@@ -103,38 +102,33 @@ flowchart TD
   M[scripts/process_notifications.php scheduled task] -. separate from web request .-> N[processScheduledNotifications]
 ```
 
-```
-Browser Request
-      │
-      ▼
-index.php (front controller)
-      │
-      ├── require bootstrap.php
-      │       ├── Register PSR-4-style autoloader (App\ → app/)
-      │       ├── Load .env file into getenv / $_ENV / $_SERVER
-      │       ├── Set security headers (X-Frame-Options, X-Content-Type-Options, Referrer-Policy)
-      │       ├── Load config/app.php and config/database.php
-      │       ├── Container::set('db') — PDO connection
-      │       ├── Migration::run() — idempotent schema migration
-      │       ├── Container::set('jwt') — JwtService
-      │       ├── Container::set('auth') — Authorization
-      │       └── Container::set('feedbackRepository', 'categoryRepository', etc.)
-      │
-      │       NOTE: processScheduledNotifications() is NOT called here.
-      │       It runs only via scripts/process_notifications.php (cron/Task Scheduler).
-      ├── Check APP_MODE — block /hr and /api/hr in public mode
-      │
-      ├── Register routes on Router instance
-      │
-      └── Router::dispatch(method, path)
-              │
-              ├── Match route pattern using regex
-              ├── Extract named URL parameters
-              └── Instantiate controller class → call method(params)
-                      │
-                      ├── API Controller → Response::json(array, statusCode)
-                      └── Web Controller → include view template → HTML output
-```
+  ### Component Interaction (Detailed)
+
+  ```mermaid
+  sequenceDiagram
+      participant Browser
+      participant Front as index.php
+      participant Boot as bootstrap.php
+      participant Router
+      participant Ctrl as Controller
+      participant Svc as Service
+      participant Repo as Repository
+      participant DB as MySQL
+
+      Browser->>Front: HTTP request
+      Front->>Boot: require bootstrap.php
+      Boot-->>Front: Container + Config + Security headers
+      Front->>Front: APP_MODE / route guard checks
+      Front->>Router: register routes + dispatch(method, path)
+      Router->>Ctrl: call action(params)
+      Ctrl->>Svc: business logic
+      Svc->>Repo: persistence operations
+      Repo->>DB: SQL query
+      DB-->>Repo: rows/result
+      Repo-->>Svc: mapped data
+      Svc-->>Ctrl: response payload
+      Ctrl-->>Browser: JSON or rendered HTML
+  ```
 
 ---
 
@@ -142,34 +136,81 @@ index.php (front controller)
 
 ### Entity Relationship Summary
 
-```
-categories ──────────────────────────┐
-                                      │ FK category_id
-statuses ────────────────────────────┤
-                                      │ FK status_id
-stages ──────────────────────────────┤
-                                      │ FK stage_id
-                            feedbacks (id, reference_no, category_id,
-                                        category_other, description,
-                                        status_id, stage_id, priority,
-                                        anonymized_summary, action_taken,
-                                        outcome_comments, internal_notes,
-                                        acknowledged_at, created_at, updated_at)
-                                      │
-              ┌───────────────────────┼────────────────────────────┐
-              │                       │                            │
-     report_updates             attachments                  notifications
-     (FK feedback_id CASCADE)   (FK feedback_id CASCADE,     (FK feedback_id CASCADE)
-                                  FK report_update_id CASCADE)
+```mermaid
+erDiagram
+  CATEGORIES ||--o{ FEEDBACKS : "category_id"
+  STATUSES ||--o{ FEEDBACKS : "status_id"
+  STAGES ||--o{ FEEDBACKS : "stage_id"
+  FEEDBACKS ||--o{ REPORT_UPDATES : "feedback_id"
+  FEEDBACKS ||--o{ ATTACHMENTS : "feedback_id"
+  REPORT_UPDATES ||--o{ ATTACHMENTS : "report_update_id"
+  FEEDBACKS ||--o{ NOTIFICATIONS : "feedback_id"
+  FEEDBACKS ||--o{ AUDIT_LOGS : "feedback_id (SET NULL on delete)"
+  USERS ||--o{ AUDIT_LOGS : "actor_user_id (SET NULL on delete)"
 
-                                login_attempts
-                                (rate-limiting — no FK)
-
-                                audit_logs
-                                (FK feedback_id SET NULL — preserves history on delete)
-
-                                users
-                                (HR/Ethics officer accounts)
+  CATEGORIES {
+    CHAR id PK
+    string name
+    bool is_active
+    int sort_order
+  }
+  STATUSES {
+    CHAR id PK
+    string name
+    bool is_active
+    int sort_order
+  }
+  STAGES {
+    CHAR id PK
+    string name
+    bool is_active
+    int sort_order
+  }
+  FEEDBACKS {
+    CHAR id PK
+    string reference_no
+    CHAR category_id FK
+    CHAR status_id FK
+    CHAR stage_id FK
+    string priority
+  }
+  REPORT_UPDATES {
+    CHAR id PK
+    CHAR feedback_id FK
+    string update_reference_no
+  }
+  ATTACHMENTS {
+    CHAR id PK
+    CHAR feedback_id FK
+    CHAR report_update_id FK
+    string stored_name
+    int size_bytes
+  }
+  NOTIFICATIONS {
+    CHAR id PK
+    CHAR feedback_id FK
+    string kind
+    string recipient
+  }
+  AUDIT_LOGS {
+    CHAR id PK
+    CHAR feedback_id FK
+    CHAR actor_user_id FK
+    string action
+    datetime created_at
+  }
+  USERS {
+    CHAR id PK
+    string email
+    string role
+    bool is_active
+  }
+  LOGIN_ATTEMPTS {
+    CHAR id PK
+    string ip
+    bool success
+    datetime attempted_at
+  }
 ```
 
 ### Table Definitions
@@ -177,9 +218,11 @@ stages ────────────────────────�
 #### `stages`
 | Column | Type | Notes |
 |---|---|---|
-| id | INT UNSIGNED PK | Auto-increment |
+| id | CHAR(36) PK | UUID |
 | name | VARCHAR(120) UNIQUE | Display name (e.g. Logged, Under Review, Escalated) |
 | is_active | TINYINT(1) | 1 = available for use by HR |
+| created_by_user_id | CHAR(36) NULL | FK -> users(id), ON DELETE SET NULL |
+| updated_by_user_id | CHAR(36) NULL | FK -> users(id), ON DELETE SET NULL |
 | sort_order | INT UNSIGNED | Controls display order |
 | created_at | DATETIME | |
 | updated_at | DATETIME | |
@@ -189,9 +232,11 @@ Default stages seeded on install: Logged, Under Review, Awaiting Response, Escal
 #### `categories`
 | Column | Type | Notes |
 |---|---|---|
-| id | INT UNSIGNED PK | Auto-increment |
+| id | CHAR(36) PK | UUID |
 | name | VARCHAR(120) UNIQUE | Display name |
 | is_active | TINYINT(1) | 1 = shown to employees |
+| created_by_user_id | CHAR(36) NULL | FK -> users(id), ON DELETE SET NULL |
+| updated_by_user_id | CHAR(36) NULL | FK -> users(id), ON DELETE SET NULL |
 | sort_order | INT UNSIGNED | Controls display order |
 | created_at | DATETIME | |
 | updated_at | DATETIME | |
@@ -199,9 +244,11 @@ Default stages seeded on install: Logged, Under Review, Awaiting Response, Escal
 #### `statuses`
 | Column | Type | Notes |
 |---|---|---|
-| id | INT UNSIGNED PK | Auto-increment |
+| id | CHAR(36) PK | UUID |
 | name | VARCHAR(120) UNIQUE | Display name |
 | is_active | TINYINT(1) | 1 = usable by HR |
+| created_by_user_id | CHAR(36) NULL | FK -> users(id), ON DELETE SET NULL |
+| updated_by_user_id | CHAR(36) NULL | FK -> users(id), ON DELETE SET NULL |
 | sort_order | INT UNSIGNED | Controls display order |
 | created_at | DATETIME | |
 | updated_at | DATETIME | |
@@ -209,13 +256,16 @@ Default stages seeded on install: Logged, Under Review, Awaiting Response, Escal
 #### `feedbacks`
 | Column | Type | Notes |
 |---|---|---|
-| id | BIGINT UNSIGNED PK | Auto-increment |
+| id | CHAR(36) PK | UUID |
 | reference_no | VARCHAR(40) UNIQUE | Format: `AF-YYYYMMDD-XXXXXX` |
-| category_id | INT UNSIGNED NOT NULL | FK → categories(id) |
+| category_id | CHAR(36) NOT NULL | FK  ->  categories(id) |
 | category_other | VARCHAR(255) NULL | Populated only when category = "Other" |
 | description | TEXT NOT NULL | Employee-submitted detail |
-| status_id | INT UNSIGNED NOT NULL | FK → statuses(id) |
-| stage_id | INT UNSIGNED NOT NULL | FK → stages(id) |
+| status_id | CHAR(36) NOT NULL | FK  ->  statuses(id) |
+| stage_id | CHAR(36) NOT NULL | FK  ->  stages(id) |
+| assigned_to_user_id | CHAR(36) NULL | FK -> users(id), ON DELETE SET NULL |
+| assigned_at | DATETIME NULL | Timestamp when assigned |
+| updated_by_user_id | CHAR(36) NULL | FK -> users(id), ON DELETE SET NULL |
 | priority | ENUM('Low','Normal','High','Critical') | Default: Normal — fixed ENUM (not a table) |
 | anonymized_summary | TEXT NULL | HR-authored; visible to employee via lookup |
 | action_taken | TEXT NULL | HR internal |
@@ -232,8 +282,8 @@ Default stages seeded on install: Logged, Under Review, Awaiting Response, Escal
 #### `report_updates`
 | Column | Type | Notes |
 |---|---|---|
-| id | BIGINT UNSIGNED PK | |
-| feedback_id | BIGINT UNSIGNED NOT NULL | FK → feedbacks(id) ON DELETE CASCADE |
+| id | CHAR(36) PK | UUID |
+| feedback_id | CHAR(36) NOT NULL | FK  ->  feedbacks(id) ON DELETE CASCADE |
 | update_reference_no | VARCHAR(40) UNIQUE | Format: `UPD-YYYYMMDD-XXXXXX` |
 | update_text | TEXT NOT NULL | Employee follow-up content |
 | created_at | DATETIME NOT NULL | |
@@ -241,9 +291,9 @@ Default stages seeded on install: Logged, Under Review, Awaiting Response, Escal
 #### `attachments`
 | Column | Type | Notes |
 |---|---|---|
-| id | BIGINT UNSIGNED PK | |
-| feedback_id | BIGINT UNSIGNED NULL | FK → feedbacks(id) ON DELETE CASCADE |
-| report_update_id | BIGINT UNSIGNED NULL | FK → report_updates(id) ON DELETE CASCADE |
+| id | CHAR(36) PK | UUID |
+| feedback_id | CHAR(36) NULL | FK  ->  feedbacks(id) ON DELETE CASCADE |
+| report_update_id | CHAR(36) NULL | FK  ->  report_updates(id) ON DELETE CASCADE |
 | original_name | VARCHAR(255) | Original filename |
 | stored_name | VARCHAR(255) | Randomised filename on disk |
 | mime_type | VARCHAR(150) | |
@@ -253,9 +303,9 @@ Default stages seeded on install: Logged, Under Review, Awaiting Response, Escal
 #### `audit_logs`
 | Column | Type | Notes |
 |---|---|---|
-| id | BIGINT UNSIGNED PK | |
-| feedback_id | BIGINT UNSIGNED NULL | FK → feedbacks(id) ON DELETE SET NULL |
-| actor_user_id | INT NULL | FK → users(id) ON DELETE SET NULL (nullable for anonymous actions) |
+| id | CHAR(36) PK | UUID |
+| feedback_id | CHAR(36) NULL | FK  ->  feedbacks(id) ON DELETE SET NULL |
+| actor_user_id | CHAR(36) NULL | FK  ->  users(id) ON DELETE SET NULL (nullable for anonymous actions) |
 | actor | VARCHAR(80) | `anonymous` or HR username |
 | action | VARCHAR(200) | Machine-readable action label |
 | reference_no | VARCHAR(40) | Retained even if report is deleted |
@@ -268,8 +318,8 @@ Design note:
 #### `notifications`
 | Column | Type | Notes |
 |---|---|---|
-| id | BIGINT UNSIGNED PK | |
-| feedback_id | BIGINT UNSIGNED NOT NULL | FK → feedbacks(id) ON DELETE CASCADE |
+| id | CHAR(36) PK | UUID |
+| feedback_id | CHAR(36) NOT NULL | FK  ->  feedbacks(id) ON DELETE CASCADE |
 | kind | VARCHAR(20) | `new_feedback`, `followup_notif`, `reminder_48h`, `escalation_72h` |
 | recipient | VARCHAR(100) | Email address sent to |
 | sent_at | DATETIME NOT NULL | |
@@ -277,18 +327,18 @@ Design note:
 #### `users`
 | Column | Type | Notes |
 |---|---|---|
-| id | INT PK | |
+| id | CHAR(36) PK | UUID |
 | name | VARCHAR(255) | |
 | email | VARCHAR(255) UNIQUE | |
 | password_hash | VARCHAR(255) | bcrypt |
-| role | ENUM('hr','ethics') | |
-| is_active | BOOLEAN | |
-| created_at / updated_at | TIMESTAMP | |
+| role | ENUM('hr','ethics','manager','officer') | |
+| is_active | TINYINT(1) | |
+| created_at / updated_at | DATETIME | |
 
 #### `login_attempts`
 | Column | Type | Notes |
 |---|---|---|
-| id | INT UNSIGNED PK | |
+| id | CHAR(36) PK | UUID |
 | ip | VARCHAR(45) | IPv4 or IPv6 |
 | success | TINYINT(1) | |
 | attempted_at | DATETIME | |
@@ -297,7 +347,7 @@ Design note:
 
 ## 6. API Endpoints
 
-### Public Endpoints (available in both modes)
+### Public Endpoints - External (`external/index.php`)
 
 | Method | Path | Description |
 |---|---|---|
@@ -305,14 +355,21 @@ Design note:
 | POST | `/api/feedback` | Submit new anonymous feedback |
 | POST | `/api/feedback/update` | Submit follow-up to existing case |
 | GET | `/api/feedback/{reference}` | Retrieve own case status and updates |
-| GET | `/api/reports` | Public anonymized reports (filterable) |
 | GET | `/api/attachments/{id}` | Download an attachment by ID |
 | GET | `/api/categories` | List active categories (for dropdown) |
-| GET | `/api/categories/{id}` | Get a single category |
 | GET | `/api/statuses` | List active statuses |
-| GET | `/api/statuses/{id}` | Get a single status |
-| GET | `/api/stages` | List active workflow stages |
-| GET | `/api/stages/{id}` | Get a single stage |
+
+### Public/Mixed Endpoints - Internal (`internal/index.php`)
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/` | Internal landing routed to HR shell |
+| GET | `/api/reports` | Public anonymized reports (intranet/domain/VPN gated) |
+| GET | `/api/attachments/{id}` | Download attachment by ID |
+| GET | `/api/categories` | List active categories |
+| GET | `/api/statuses` | List active statuses |
+| GET | `/api/stages` | List active stages |
+| GET | `/anonymized/reports` | Reports page (intranet/domain/VPN gated) |
 
 ### HR Endpoints (full mode only — JWT required except login)
 
@@ -323,18 +380,18 @@ Design note:
 | GET | `/hr/dashboard` | Analytics dashboard (HTML) |
 | GET | `/hr/categories` | Manage categories (HTML) |
 | GET | `/hr/statuses` | Manage statuses (HTML) |
+| GET | `/hr/stages` | Manage stages (HTML) |
 | POST | `/api/hr/login` | Authenticate HR user, returns JWT |
 | POST | `/api/hr/logout` | Invalidate session |
 | GET | `/api/hr/me` | Current authenticated user profile |
 | GET | `/api/hr/cases` | List all feedback cases (filterable, paged) |
 | GET | `/api/hr/cases/{reference}` | Full case detail |
 | POST | `/api/hr/cases/{reference}` | Update case (status, priority, notes, etc.) |
+| GET | `/api/hr/personnel` | List assignable HR/Ethics personnel |
 | GET | `/api/hr/dashboard/trends` | Quarterly category trends + frequency summary |
 | GET/POST/PUT/DELETE | `/api/hr/categories` | CRUD for feedback categories |
 | GET/POST/PUT/DELETE | `/api/hr/statuses` | CRUD for workflow statuses |
 | GET/POST/PUT/DELETE | `/api/hr/stages` | CRUD for workflow stages |
-| GET | `/api/docs` | API documentation page (HTML) |
-| GET | `/api/openapi.json` | OpenAPI 3.0 specification (JSON) |
 
 ---
 
@@ -342,24 +399,21 @@ Design note:
 
 ### HR Login Flow
 
-```
-POST /api/hr/login
-      │
-      ├── 1. Rate-limit check — max 5 failed attempts per IP per 15 minutes
-      │
-      ├── 2. Hybrid authentication (controlled by HR_AUTH_MODE env var):
-      │       ├── "ldap"   — LDAP/AD only
-      │       ├── "local"  — database users table only
-      │       └── "hybrid" — try LDAP first, fall back to database
-      │
-      ├── 3. On success:
-      │       ├── Issue JWT (HS256, 24-hour expiry)
-      │       │   Payload: { user_id, email, name, role, iat, exp }
-      │       └── Return token to client
-      │
-      └── 4. Client stores JWT in localStorage
-              └── All subsequent HR API calls include:
-                  Authorization: Bearer <token>
+```mermaid
+flowchart TD
+  A[POST /api/hr/login] --> B[Rate-limit check: max 5 failed attempts per IP per 15 minutes]
+  B --> C{HR_AUTH_MODE}
+  C -->|ldap| D[LDAP/AD authentication only]
+  C -->|local| E[Local users table authentication only]
+  C -->|hybrid| F[Try local database then fallback to LDAP]
+  D --> G{Authenticated?}
+  E --> G
+  F --> G
+  G -->|No| H[Return auth error]
+  G -->|Yes| I[Issue JWT HS256 with 24-hour expiry]
+  I --> J[Return token and user profile]
+  J --> K[Client stores token in localStorage]
+  K --> L[Subsequent HR API calls include Authorization Bearer token]
 ```
 
 ### LDAP Authentication Detail
@@ -386,7 +440,7 @@ Every HR API controller calls `Authorization::authenticate()` which:
 
 Anonymity is enforced at the application layer:
 
-- No session, cookie, IP address, user agent, or browser fingerprint is stored against a submission
+- No direct user identity is stored against anonymous submissions in `feedbacks`
 - The `feedbacks` table has no user identifier column
 - The only link back to a submission is the reference number, which is randomly generated (`bin2hex(random_bytes(3))`) and only shown once to the submitter
 - `internal_notes` are never returned by any public API endpoint
@@ -396,8 +450,10 @@ Anonymity is enforced at the application layer:
 
 ## 9. File Upload Handling
 
-- Accepted MIME types are validated server-side (PDF, Word documents, images)
-- Files are stored in the `/uploads/` directory using a randomised `stored_name`
+- Accepted MIME types are validated server-side (documents, images, audio, video, archives)
+- Mixed-format multiple attachments are supported in a single submission
+- Per-file size limit is 25MB
+- Files are stored in a private attachments storage path (default: `anonymous_feedback_private_uploads/`) using a randomised `stored_name`
 - The `/uploads/` path is blocked at the front controller level (HTTP 403) — files can only be downloaded via `/api/attachments/{id}`
 - Attachment records are linked to either a `feedback_id` or a `report_update_id` (not both)
 
@@ -440,7 +496,7 @@ The script `scripts/process_notifications.php` must be run by an external schedu
 |---|---|
 | SQL Injection | All queries use PDO prepared statements with bound parameters |
 | XSS | Output in views uses `htmlspecialchars()` / `escHtml()` in JS; CSP not yet implemented |
-| CSRF | Not applicable — all state-changing operations require JWT authentication |
+| CSRF | Public anonymous endpoints exist; HR state-changing operations require JWT |
 | Clickjacking | `X-Frame-Options: DENY` header set on all responses |
 | MIME sniffing | `X-Content-Type-Options: nosniff` header |
 | Path traversal | Attachment downloads use `basename()` on stored filename; uploads directory blocked at front controller |
@@ -460,6 +516,7 @@ All configuration is driven by environment variables loaded from a `.env` file. 
 | `APP_NAME` | Application display name | `Anonymous Feedback Tool` |
 | `APP_MODE` | `public` or `full` | `full` |
 | `APP_BASE_URL` | Base URL (required for cron email links) | `http://localhost:8000` |
+| `ATTACHMENTS_STORAGE_PATH` | Absolute/relative private attachments directory | repo `anonymous_feedback_private_uploads` |
 | `JWT_SECRET` | HMAC signing key — **must be changed in production** | insecure default |
 | `DB_HOST` | MySQL host | `127.0.0.1` |
 | `DB_PORT` | MySQL port | `3306` |
@@ -471,11 +528,17 @@ All configuration is driven by environment variables loaded from a `.env` file. 
 | `LDAP_PORT` | LDAP port | `389` |
 | `LDAP_BASE_DN` | Base DN for user searches | _(empty)_ |
 | `LDAP_DOMAIN` | AD domain for UPN suffix | _(empty)_ |
+| `LDAP_BIND_PATTERN` | Direct-bind pattern (e.g. `%s@domain.com`) | `%s` |
 | `LDAP_USE_TLS` | Enable STARTTLS | `false` |
 | `LDAP_SERVICE_USER` | Service account DN for bind | _(empty)_ |
 | `LDAP_SERVICE_PASSWORD` | Service account password | _(empty)_ |
-| `LDAP_HR_GROUPS` | Comma-separated AD groups for HR role | _(empty)_ |
-| `LDAP_IS_GROUPS` | Comma-separated AD groups for Ethics role | _(empty)_ |
+| `LDAP_HR_GROUPS` | Pipe-separated HR group DNs/CNs | _(empty)_ |
+| `LDAP_IS_GROUPS` | Pipe-separated Information Systems group DNs/CNs | _(empty)_ |
+| `LDAP_HR_OUS` | Pipe-separated OU fragments for HR role mapping | _(empty)_ |
+| `LDAP_IS_OUS` | Pipe-separated OU fragments for Information Systems role mapping | _(empty)_ |
+| `LDAP_HR_DEPARTMENTS` | Pipe-separated department names for HR role mapping | _(empty)_ |
+| `LDAP_IS_DEPARTMENTS` | Pipe-separated department names for Information Systems role mapping | _(empty)_ |
+| `DEVELOPER_OVERRIDE_USERS` | Pipe-separated developer override account identifiers | _(empty)_ |
 | `SMTP_HOST` | SMTP server hostname | `localhost` |
 | `SMTP_PORT` | SMTP port (587 = STARTTLS, 465 = SMTPS) | `587` |
 | `SMTP_USERNAME` | SMTP auth username | _(empty)_ |
@@ -484,7 +547,10 @@ All configuration is driven by environment variables loaded from a `.env` file. 
 | `MAIL_FROM_NAME` | Sender display name | `Voice Without Fear` |
 | `HR_NOTIFICATION_EMAIL` | Fallback HR notification recipient | _(empty)_ |
 | `ETHICS_NOTIFICATION_EMAIL` | Ethics officer notification recipient | _(empty)_ |
+| `NOTIFICATIONS_IMMEDIATE_ENABLED` | Enable immediate notifications | `true` |
+| `NOTIFICATIONS_SCHEDULED_ENABLED` | Enable scheduler-driven notifications | `true` |
 | `DEV_NOTIFICATION_EMAIL` | **Dev only** — when set, all notifications are redirected to this address regardless of DB recipients | _(empty)_ |
+| `MALWARE_SCANNER` | Malware scanner mode (`noop` or `clamav`) | `noop` |
 
 ---
 
@@ -495,8 +561,8 @@ All configuration is driven by environment variables loaded from a `.env` file. 
 The migration handles both:
 - **Fresh installs** — creates all tables from `schema.sql` and seeds default data from `users.sql`
 - **Legacy upgrades** — detects and migrates old schema versions:
-  - `status` (text column) → `status_id` (FK to `statuses` table)
-  - `category` (text column) → `category_id` (FK to `categories` table) + `category_other`
+  - `status` (text column)  ->  `status_id` (FK to `statuses` table)
+  - `category` (text column)  ->  `category_id` (FK to `categories` table) + `category_other`
   - `audit_logs.feedback_id` FK addition
 
 ---

@@ -1,0 +1,256 @@
+<?php declare(strict_types=1);
+
+namespace App\Services;
+
+use App\Repositories\FeedbackRepository;
+use DateTime;
+
+class FeedbackService {
+    public function __construct(
+        private FeedbackRepository $repository,
+        private ?MalwareScannerInterface $malwareScanner = null,
+        private ?string $attachmentsStoragePath = null
+    ) {
+        $this->malwareScanner = $malwareScanner ?? new NoOpMalwareScanner();
+        $defaultStoragePath = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'anonymous_feedback_private_uploads';
+        $configuredPath = trim((string) ($this->attachmentsStoragePath ?? ''));
+        $this->attachmentsStoragePath = $configuredPath !== '' ? rtrim($configuredPath, "\\/") : $defaultStoragePath;
+    }
+
+    private function ensureAttachmentsDirectory(): string
+    {
+        $configured = trim((string) ($this->attachmentsStoragePath ?? ''));
+        $candidates = array_values(array_unique(array_filter([
+            $configured,
+            dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'anonymous_feedback_private_uploads',
+            rtrim(sys_get_temp_dir(), "\\/") . DIRECTORY_SEPARATOR . 'anonymous_feedback_private_uploads',
+        ], static fn(string $path): bool => $path !== '')));
+
+        foreach ($candidates as $candidate) {
+            $uploadDir = rtrim($candidate, "\\/");
+            if (!is_dir($uploadDir) && !@mkdir($uploadDir, 0750, true)) {
+                continue;
+            }
+
+            if (!is_writable($uploadDir)) {
+                continue;
+            }
+
+            $resolved = realpath($uploadDir);
+            if ($resolved === false) {
+                continue;
+            }
+
+            $this->attachmentsStoragePath = $resolved;
+            return $resolved;
+        }
+
+        throw new \RuntimeException('Failed to initialize internal upload directory. Configure ATTACHMENTS_STORAGE_PATH to a writable folder.', 500);
+    }
+
+    public function getAttachmentsStorageHealth(): array
+    {
+        try {
+            $resolved = $this->ensureAttachmentsDirectory();
+            return [
+                'ok' => true,
+                'path' => $resolved,
+                'writable' => is_writable($resolved),
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'ok' => false,
+                'path' => (string) ($this->attachmentsStoragePath ?? ''),
+                'writable' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    
+    public function generateReference(string $prefix = 'AF'): string {
+        $date = (new DateTime())->format('Ymd');
+        $random = strtoupper(bin2hex(random_bytes(3)));
+        return "{$prefix}-{$date}-{$random}";
+    }
+
+    
+    public function submitFeedback(string $category, string $description, ?string $categoryOther = null): array {
+        $reference = $this->generateReference('AF');
+
+        $categoryId = $this->repository->getCategoryIdByName($category);
+        $normalizedOther = ($category === 'Other' && $categoryOther !== null && $categoryOther !== '')
+            ? $categoryOther
+            : null;
+
+        $feedbackId = $this->repository->createReport($reference, $categoryId, $normalizedOther, $description);
+
+        
+        $this->repository->logAudit('anonymous', 'feedback_submitted', $reference,
+            "New feedback submitted in category: {$category}");
+
+        return [
+            'success' => true,
+            'reference' => $reference,
+            'feedback_id' => $feedbackId,
+            'report_id' => $feedbackId,
+            'message' => 'Feedback submitted successfully'
+        ];
+    }
+
+    
+    public function submitFollowUp(string $reference, string $updateText): array {
+        $report = $this->repository->findByReference($reference);
+        
+        if (!$report) {
+            throw new \RuntimeException('Feedback case not found', 404);
+        }
+
+        $updateReference = $this->generateReference('UPD');
+        $updateId = $this->repository->createUpdate((string)$report['id'], $updateReference, $updateText);
+        
+        
+        $this->repository->logAudit('anonymous', 'followup_submitted', $reference,
+            "Follow-up submitted: {$updateReference}");
+
+        return [
+            'success' => true,
+            'update_reference' => $updateReference,
+            'update_id' => $updateId,
+            'message' => 'Follow-up submitted successfully'
+        ];
+    }
+
+    
+    public function getCaseDetails(string $reference): array {
+        $detailed = $this->repository->getDetailedReport($reference);
+        
+        if (!$detailed) {
+            throw new \RuntimeException('Feedback case not found', 404);
+        }
+
+        return $detailed;
+    }
+
+    public function storeAttachments(string $feedbackId, ?string $updateId, array $files): array {
+        $stored = [];
+        $allowed = [
+            'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'csv', 'txt',
+            'jpg', 'jpeg', 'png', 'gif',
+            'mp3', 'wav', 'm4a',
+            'mp4', 'webm', 'mov',
+            'zip', 'rar', '7z'
+        ];
+        $maxSize = 25 * 1024 * 1024;
+        $uploadDir = $this->ensureAttachmentsDirectory();
+
+        foreach ($files['name'] ?? [] as $index => $name) {
+            $error = $files['error'][$index] ?? null;
+            $tmpName = $files['tmp_name'][$index] ?? null;
+            $size = $files['size'][$index] ?? 0;
+
+            if ($error !== UPLOAD_ERR_OK || !$tmpName) {
+                continue;
+            }
+
+            if ($size > $maxSize) {
+                throw new \RuntimeException("File {$name} exceeds maximum size", 400);
+            }
+
+            $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+            if (!in_array($ext, $allowed)) {
+                throw new \RuntimeException("File type {$ext} not allowed", 400);
+            }
+
+            
+            $mimeMap = [
+                'pdf'  => ['application/pdf'],
+                'doc'  => ['application/msword'],
+                'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                           'application/zip'], 
+                'xls'  => ['application/vnd.ms-excel'],
+                'xlsx' => ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                           'application/zip'],
+                'ppt'  => ['application/vnd.ms-powerpoint'],
+                'pptx' => ['application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                           'application/zip'],
+                'csv'  => ['text/csv', 'text/plain', 'application/vnd.ms-excel'],
+                'txt'  => ['text/plain'],
+                'jpg'  => ['image/jpeg'],
+                'jpeg' => ['image/jpeg'],
+                'png'  => ['image/png'],
+                'gif'  => ['image/gif'],
+                'mp3'  => ['audio/mpeg', 'audio/mp3'],
+                'wav'  => ['audio/wav', 'audio/x-wav'],
+                'm4a'  => ['audio/mp4', 'audio/x-m4a'],
+                'mp4'  => ['video/mp4'],
+                'webm' => ['video/webm'],
+                'mov'  => ['video/quicktime'],
+                'zip'  => ['application/zip', 'application/x-zip-compressed'],
+                'rar'  => ['application/vnd.rar', 'application/x-rar-compressed'],
+                '7z'   => ['application/x-7z-compressed'],
+            ];
+
+            
+            if (function_exists('finfo_open')) {
+                $finfo        = finfo_open(FILEINFO_MIME_TYPE);
+                $detectedMime = finfo_file($finfo, $tmpName);
+                finfo_close($finfo);
+                $allowedMimes = $mimeMap[$ext] ?? [];
+                if (!empty($allowedMimes) && !in_array($detectedMime, $allowedMimes, true)) {
+                    throw new \RuntimeException(
+                        "File {$name} content type ({$detectedMime}) does not match its declared extension",
+                        400
+                    );
+                }
+            }
+
+            $storedName = bin2hex(random_bytes(16)) . '.' . $ext;
+            $uploadPath = $uploadDir . DIRECTORY_SEPARATOR . $storedName;
+
+            if (!move_uploaded_file($tmpName, $uploadPath)) {
+                throw new \RuntimeException("Failed to store file {$name}", 500);
+            }
+
+            // Scan file for malware
+            try {
+                if (!$this->malwareScanner->scan($uploadPath)) {
+                    // Malware detected, delete the file
+                    @unlink($uploadPath);
+                    throw new \RuntimeException(
+                        "File {$name} failed malware scan and was rejected. Contact support if you believe this is an error.",
+                        422
+                    );
+                }
+            } catch (\RuntimeException $e) {
+                // If it's our malware detection error, re-throw it
+                if ($e->getCode() === 422) {
+                    throw $e;
+                }
+                // For other scanner errors (network, etc), log but allow file to proceed
+                // In production, consider being stricter
+                error_log("Malware scan warning for {$name}: " . $e->getMessage());
+            }
+
+            $mimeType = $mimeMap[$ext][0] ?? 'application/octet-stream';
+            
+            $attachmentId = $this->repository->saveAttachment(
+                $feedbackId,
+                $updateId,
+                $name,
+                $storedName,
+                $mimeType,
+                $size
+            );
+
+            $stored[] = [
+                'id' => $attachmentId,
+                'name' => $name,
+                'stored_name' => $storedName,
+                'size' => $size
+            ];
+        }
+
+        return $stored;
+    }
+}

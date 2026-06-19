@@ -1,0 +1,445 @@
+:root {
+    --legal-burgundy: #9d2722;
+    --legal-blue: #008AC4;
+    --legal-gray: #98A2B3;
+    --legal-light: #f3f1ea;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #202020;
+    background-color: #fafafa;
+}
+
+
+.btn-primary {
+    background-color: var(--legal-burgundy);
+    border-color: var(--legal-burgundy);
+}
+
+.btn-primary:hover {
+    background-color: #7d1f18;
+    border-color: #7d1f18;
+}
+
+.btn-info {
+    background-color: var(--legal-blue);
+    border-color: var(--legal-blue);
+}
+
+.btn-info:hover {
+    background-color: #0069a1;
+    border-color: #0069a1;
+}
+
+.nav-link {
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.nav-link:hover {
+    opacity: 0.8;
+}
+
+
+.panel {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.panel h2 {
+    color: var(--legal-burgundy);
+    border-bottom: 3px solid var(--legal-burgundy);
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+.panel h3 {
+    color: var(--legal-blue);
+    margin-top: 20px;
+}
+
+
+.support {
+    border-left: 5px solid var(--legal-burgundy);
+    padding-left: 15px;
+    background-color: #fef5f5;
+}
+
+
+.tabs {
+    display: flex;
+    gap: 10px;
+    margin: 16px 0;
+    flex-wrap: wrap;
+}
+
+.tabs button {
+    border: 2px solid var(--legal-gray);
+    background: #fff;
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.tabs button:hover {
+    border-color: var(--legal-blue);
+    color: var(--legal-blue);
+}
+
+.tabs button.active {
+    background: var(--legal-burgundy);
+    color: #fff;
+    border-color: var(--legal-burgundy);
+}
+
+.tab-content {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+
+form {
+    display: grid;
+    gap: 14px;
+}
+
+label {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 4px;
+}
+
+input,
+select,
+textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: 0;
+    border-color: var(--legal-blue);
+    box-shadow: 0 0 0 3px rgba(0, 138, 196, 0.1);
+}
+
+textarea {
+    min-height: 120px;
+    resize: vertical;
+}
+
+.form-check-input {
+    width: 18px;
+    height: 18px;
+}
+
+.form-check-input:checked {
+    background-color: var(--legal-burgundy);
+    border-color: var(--legal-burgundy);
+}
+
+
+.output {
+    background: #1e1e1e;
+    color: #a8d9a8;
+    border-radius: 8px;
+    padding: 12px;
+    min-height: 80px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    border: 1px solid #333;
+}
+
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+}
+
+table thead {
+    background-color: var(--legal-light);
+}
+
+table th {
+    background-color: var(--legal-burgundy);
+    color: #fff;
+    padding: 12px;
+    font-weight: 600;
+    text-align: left;
+    border: 0;
+}
+
+table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+table tbody tr:hover {
+    background-color: #f5f5f5;
+}
+
+
+.badge {
+    background-color: var(--legal-blue);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+
+@media (max-width: 768px) {
+    .panel {
+        padding: 16px;
+    }
+    
+    .tabs {
+        gap: 6px;
+    }
+    
+    .tabs button {
+        padding: 8px 12px;
+        font-size: 14px;
+    }
+    
+    table {
+        font-size: 13px;
+    }
+    
+    table th,
+    table td {
+        padding: 8px;
+    }
+}
+
+body.app-notification-open {
+    overflow: hidden;
+}
+
+.app-notification-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1080;
+    display: none;
+}
+
+.app-notification-modal.is-open {
+    display: block;
+}
+
+.app-notification-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(6, 18, 32, 0.62);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.app-notification-modal__card {
+    width: min(560px, 100%);
+    background: linear-gradient(155deg, #ffffff 0%, #f6f9fc 100%);
+    border: 1px solid #d7dee6;
+    border-radius: 16px;
+    box-shadow: 0 28px 90px rgba(6, 25, 42, 0.35);
+    overflow: hidden;
+    animation: notificationPopIn 180ms ease-out;
+}
+
+.app-notification-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: linear-gradient(90deg, #9d2722 0%, #008AC4 100%);
+    color: #ffffff;
+}
+
+.app-notification-modal__brand {
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.app-notification-modal__close {
+    border: 0;
+    background: transparent;
+    color: #ffffff;
+    font-size: 28px;
+    line-height: 1;
+    opacity: 0.9;
+}
+
+.app-notification-modal__close:hover {
+    opacity: 1;
+}
+
+body.app-busy {
+    cursor: wait;
+}
+
+.app-busy-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1090;
+    display: none;
+    background: rgba(6, 18, 32, 0.45);
+    backdrop-filter: blur(1px);
+    align-items: center;
+    justify-content: center;
+    pointer-events: all;
+}
+
+.app-busy-overlay.is-open {
+    display: flex;
+}
+
+.app-busy-overlay__content {
+    background: #fff;
+    border: 1px solid #d7dee6;
+    border-radius: 12px;
+    box-shadow: 0 14px 48px rgba(6, 25, 42, 0.28);
+    padding: 18px 20px;
+    min-width: 280px;
+    text-align: center;
+}
+
+.app-busy-overlay__spinner {
+    width: 36px;
+    height: 36px;
+    margin: 0 auto 10px;
+    border-radius: 50%;
+    border: 4px solid #d7dee6;
+    border-top-color: #9d2722;
+    animation: appBusySpin 0.8s linear infinite;
+}
+
+.app-busy-overlay__text {
+    color: #22313f;
+    font-weight: 600;
+}
+
+@keyframes appBusySpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.app-notification-modal__body {
+    padding: 24px 24px 10px;
+    text-align: center;
+}
+
+.app-notification-modal__icon {
+    margin-bottom: 12px;
+    font-size: 2rem;
+}
+
+.app-notification-modal[data-variant="success"] .app-notification-modal__icon {
+    color: #198754;
+}
+
+.app-notification-modal[data-variant="danger"] .app-notification-modal__icon {
+    color: #9d2722;
+}
+
+.app-notification-modal[data-variant="warning"] .app-notification-modal__icon {
+    color: #b37b00;
+}
+
+.app-notification-modal[data-variant="info"] .app-notification-modal__icon {
+    color: #008AC4;
+}
+
+.app-notification-modal__title {
+    margin: 0 0 8px;
+    font-size: 1.35rem;
+    color: #0f2740;
+}
+
+.app-notification-modal__message {
+    margin: 0;
+    font-size: 1rem;
+    color: #21374f;
+}
+
+.app-notification-modal__details {
+    margin: 12px 0 0;
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: #9d2722;
+}
+
+.app-notification-modal__details.is-hidden,
+.app-notification-modal__close.is-hidden {
+    display: none;
+}
+
+.app-notification-modal__footer {
+    padding: 20px 24px 24px;
+    display: flex;
+    justify-content: center;
+}
+
+.app-notification-modal__action {
+    min-width: 210px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+@keyframes notificationPopIn {
+    from {
+        transform: translateY(12px) scale(0.97);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+@media (max-width: 576px) {
+    .app-notification-modal__backdrop {
+        padding: 14px;
+    }
+
+    .app-notification-modal__header {
+        padding: 14px 16px;
+    }
+
+    .app-notification-modal__body {
+        padding: 20px 16px 8px;
+    }
+
+    .app-notification-modal__footer {
+        padding: 16px;
+    }
+
+    .app-notification-modal__action {
+        width: 100%;
+    }
+}

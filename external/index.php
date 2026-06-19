@@ -1,0 +1,55 @@
+<?php
+declare(strict_types=1);
+
+// When using the PHP built-in dev server, serve static files directly.
+if (PHP_SAPI === 'cli-server') {
+    $staticFile = __DIR__ . parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+    if (is_file($staticFile)) {
+        return false;
+    }
+}
+
+use App\Controllers\Api\CategoryApiController;
+use App\Controllers\Api\FeedbackApiController;
+use App\Controllers\Api\StatusApiController;
+use App\Controllers\Web\PageController;
+use App\Core\Request;
+use App\Core\Router;
+
+require_once __DIR__ . '/app/bootstrap.php';
+
+$path = Request::path();
+
+// Never allow direct access to stored uploads via web path.
+if (str_starts_with($path, '/uploads')) {
+    http_response_code(403);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['error' => 'Forbidden']);
+    exit;
+}
+
+// External deployment must never expose internal HR surfaces.
+if (
+    str_starts_with($path, '/hr') ||
+    str_starts_with($path, '/api/hr') ||
+    str_starts_with($path, '/anonymized') ||
+    $path === '/api/reports'
+) {
+    http_response_code(404);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['error' => 'Not found']);
+    exit;
+}
+
+$router = new Router();
+
+// Public website + anonymous reporting surfaces.
+$router->add('GET', '/', [PageController::class, 'home']);
+$router->add('POST', '/api/feedback', [FeedbackApiController::class, 'submit']);
+$router->add('POST', '/api/feedback/update', [FeedbackApiController::class, 'submitUpdate']);
+$router->add('GET', '/api/feedback/{reference}', [FeedbackApiController::class, 'getByReference']);
+$router->add('GET', '/api/health/storage', [FeedbackApiController::class, 'storageHealth']);
+$router->add('GET', '/api/attachments/{id}', [FeedbackApiController::class, 'downloadAttachment']);
+$router->add('GET', '/api/categories', [CategoryApiController::class, 'listActive']);
+$router->add('GET', '/api/statuses', [StatusApiController::class, 'listActive']);
+$router->dispatch(Request::method(), $path);
