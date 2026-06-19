@@ -58,7 +58,7 @@ The entry point is internal/index.php. It:
 - app/Core/Container.php: lightweight service container
 - app/Core/Database.php and app/Core/Migration.php: PDO initialization and schema migration on bootstrap
 - app/Core/JwtService.php: HS256 token encode and decode with expiration verification
-- app/Core/Authorization.php: bearer authentication and role-based access checks
+- app/Core/Authorization.php: cookie-backed JWT authentication and role-based access checks
 - app/Core/SmtpMailer.php: SMTP transport for notification emails
 
 ### Controllers
@@ -94,7 +94,7 @@ Current login behavior in hybrid mode:
 ### JWT and role checks
 
 - JWTs are HS256 signed and include user_id, email, name, role, iat, exp
-- Authorization service validates bearer tokens and enforces role checks
+- Authorization service validates JWTs from secure auth cookie and enforces role checks
 - Console roles: hr, ethics, manager, officer
 - Case write roles: hr, ethics, officer
 - Configuration roles: hr, officer

@@ -25,21 +25,31 @@ function initHrCaseDetailPage() {
     let currentCoInvestigatorIds = [];
     let personnelList = [];
     let hasShownAcknowledgePrompt = false;
+    let currentCaseReport = null;
+    let latestReporterFeedbackValue = '';
 
     const isCompletedStatus = (status) => String(status || '').toLowerCase().includes('completed');
     const isClosedStage = (stage) => String(stage || '').toLowerCase().includes('closed');
-    const getCompletedFieldError = (status, stage, values) => {
+    const getCompletedFieldError = (status, stage, values, existingValues = {}) => {
         if (!isCompletedStatus(status)) {
             return '';
         }
 
+        const resolveValue = (key) => {
+            const incoming = String(values[key] || '').trim();
+            if (incoming !== '') {
+                return incoming;
+            }
+            return String(existingValues[key] || '').trim();
+        };
+
         const checks = [
-            ['Feedback to Reporter', values.reporter_feedback],
-            ['Action Taken', values.action_taken],
+            ['Feedback to Reporter', resolveValue('reporter_feedback')],
+            ['Action Taken', resolveValue('action_taken')],
         ];
 
         if (isClosedStage(stage)) {
-            checks.push(['Outcome Comments', values.outcome_comments]);
+            checks.push(['Outcome Comments', resolveValue('outcome_comments')]);
         }
 
         for (const [label, value] of checks) {
@@ -73,7 +83,37 @@ function initHrCaseDetailPage() {
             reporter_feedback: values.reporterFeedback,
             action_taken: values.actionTaken,
             outcome_comments: values.outcomeComments,
+        }, {
+            reporter_feedback: report.reporter_feedback || '',
+            action_taken: report.action_taken || '',
+            outcome_comments: report.outcome_comments || '',
         });
+    };
+
+    const getLatestAuditFieldValue = (auditEntries, fieldName, fallbackValue = '') => {
+        for (const entry of (auditEntries || [])) {
+            if ((entry.action || '') !== 'case_updated') {
+                continue;
+            }
+
+            let details = null;
+            try {
+                details = JSON.parse((entry.details || '').toString());
+            } catch {
+                details = null;
+            }
+
+            if (!details || typeof details !== 'object') {
+                continue;
+            }
+
+            const fieldValue = (details[fieldName] || '').toString().trim();
+            if (fieldValue !== '') {
+                return fieldValue;
+            }
+        }
+
+        return (fallbackValue || '').toString().trim();
     };
 
     const createAcknowledgeModal = () => {
@@ -275,7 +315,7 @@ function initHrCaseDetailPage() {
         const statusValue = String(statusSelect?.value || '').trim().toLowerCase();
 
         const isEarlyStage = stageValue === 'logged' || stageValue === 'acknowledge case';
-        const isClosedStage = stageValue === 'closed';
+        const isClosedStage = stageValue.includes('closed');
         const isInProgress = statusValue.includes('progress');
         const isCompleted = statusValue.includes('completed');
 
@@ -334,7 +374,8 @@ function initHrCaseDetailPage() {
         }
         updateForm.anonymized_summary.value = report.anonymized_summary || '';
         if (updateForm.reporter_feedback) {
-            updateForm.reporter_feedback.value = report.reporter_feedback || '';
+            // Keep this field as a new-entry box. Existing values are shown in history.
+            updateForm.reporter_feedback.value = '';
         }
         updateForm.action_taken.value = report.action_taken || '';
         updateForm.outcome_comments.value = report.outcome_comments || '';
@@ -364,6 +405,7 @@ function initHrCaseDetailPage() {
         }).join('');
 
         const buildCaseUpdateHistory = (fieldName, fallbackValue = '') => {
+            const seen = new Set();
             const items = (auditEntries || []).map((entry) => {
                 if ((entry.action || '') !== 'case_updated') {
                     return '';
@@ -385,6 +427,12 @@ function initHrCaseDetailPage() {
                     return '';
                 }
 
+                const dedupeKey = fieldValue.toLowerCase();
+                if (seen.has(dedupeKey)) {
+                    return '';
+                }
+                seen.add(dedupeKey);
+
                 const changedAt = entry.created_at ? new Date(entry.created_at).toLocaleString() : 'Unknown date';
                 return `<li class="list-group-item">
                     <div class="mt-1">${escHtml(fieldValue)}</div>
@@ -397,26 +445,33 @@ function initHrCaseDetailPage() {
             }
 
             const fallback = (fallbackValue || '').toString().trim();
-            return fallback
-                ? `<li class="list-group-item"><div class="mt-1">${escHtml(fallback)}</div></li>`
-                : '';
+            if (!fallback) {
+                return '';
+            }
+
+            const fallbackKey = fallback.toLowerCase();
+            if (seen.has(fallbackKey)) {
+                return '';
+            }
+
+            return `<li class="list-group-item"><div class="mt-1">${escHtml(fallback)}</div></li>`;
         };
 
         const reporterFeedbackHistoryItems = buildCaseUpdateHistory('reporter_feedback', report.reporter_feedback || '');
         const actionTakenHistoryItems = buildCaseUpdateHistory('action_taken', report.action_taken || '');
         const outcomeCommentsHistoryItems = buildCaseUpdateHistory('outcome_comments', report.outcome_comments || '');
         summary.innerHTML = `<div class="row g-3">
-            <div class="col-md-6"><strong>Reference:</strong> ${report.reference_no || ''}</div>
-            <div class="col-md-6"><strong>Category:</strong> ${report.category || ''}</div>
-            <div class="col-md-6"><strong>Status:</strong> ${report.status || ''}</div>
-            <div class="col-md-6"><strong>Priority:</strong> ${report.priority || ''}</div>
+            <div class="col-md-6"><strong>Reference:</strong> ${escHtml(report.reference_no || '')}</div>
+            <div class="col-md-6"><strong>Category:</strong> ${escHtml(report.category || '')}</div>
+            <div class="col-md-6"><strong>Status:</strong> ${escHtml(report.status || '')}</div>
+            <div class="col-md-6"><strong>Priority:</strong> ${escHtml(report.priority || '')}</div>
             <div class="col-md-6"><strong>Province:</strong> ${escHtml(report.province || 'Not specified')}</div>
-            <div class="col-md-6"><strong>Created:</strong> ${created}</div>
-            <div class="col-md-6"><strong>Acknowledged:</strong> ${acknowledged}</div>
+            <div class="col-md-6"><strong>Created:</strong> ${escHtml(created)}</div>
+            <div class="col-md-6"><strong>Acknowledged:</strong> ${escHtml(acknowledged)}</div>
             <div class="col-md-6"><strong>Assigned Investigator:</strong> ${escHtml(assignedTo)}</div>
             <div class="col-md-6"><strong>Investigator Email:</strong> ${escHtml(assignedEmail)}</div>
-            <div class="col-md-6"><strong>Assigned At:</strong> ${assignedAt}</div>
-            <div class="col-12"><strong>Description:</strong><div class="mt-1">${report.description || ''}</div></div>
+            <div class="col-md-6"><strong>Assigned At:</strong> ${escHtml(assignedAt)}</div>
+            <div class="col-12"><strong>Description:</strong><div class="mt-1">${escHtml(report.description || '')}</div></div>
             ${reporterFeedbackHistoryItems ? `<div class="col-12"><strong>Feedback to Reporter History:</strong><ul class="list-group mt-2">${reporterFeedbackHistoryItems}</ul></div>` : ''}
             ${actionTakenHistoryItems ? `<div class="col-12"><strong>Action Taken History:</strong><ul class="list-group mt-2">${actionTakenHistoryItems}</ul></div>` : ''}
             ${outcomeCommentsHistoryItems ? `<div class="col-12"><strong>Outcome Comments History:</strong><ul class="list-group mt-2">${outcomeCommentsHistoryItems}</ul></div>` : ''}
@@ -524,32 +579,16 @@ function initHrCaseDetailPage() {
     };
 
     const loadCurrentUser = async () => {
-        const token = TokenManager.getToken();
-        const payload = token ? decodeJwtPayload(token) : null;
-        currentUserId = String(payload?.user_id || '').trim();
-        currentUserRole = String(payload?.role || '').toLowerCase();
-        const payloadCanAssign = payload?.can_assign_cases;
-        const payloadCaseManager = payload?.is_case_manager;
-
-        if (payloadCanAssign !== undefined && payloadCanAssign !== null) {
-            canAssignCases = Number(payloadCanAssign) === 1;
-        }
-        if (payloadCaseManager !== undefined && payloadCaseManager !== null) {
-            canEditAnonymizedSummary = Number(payloadCaseManager) === 1;
-        }
-
-        if ((payloadCanAssign === undefined || payloadCanAssign === null)
-            || (payloadCaseManager === undefined || payloadCaseManager === null)) {
-            try {
-                const me = await api(`${API_BASE}/hr/me`);
-                const currentUser = me?.user || {};
-                currentUserId = String(currentUser.id || currentUserId || '').trim();
-                canAssignCases = Number(currentUser.can_assign_cases || 0) === 1;
-                canEditAnonymizedSummary = !!currentUser.is_case_manager;
-            } catch {
-                canAssignCases = true;
-                canEditAnonymizedSummary = false;
-            }
+        try {
+            const me = await api(`${API_BASE}/hr/me`);
+            const currentUser = me?.user || {};
+            currentUserId = String(currentUser.id || '').trim();
+            currentUserRole = String(currentUser.role || '').toLowerCase();
+            canAssignCases = Number(currentUser.can_assign_cases || 0) === 1;
+            canEditAnonymizedSummary = !!currentUser.is_case_manager;
+        } catch {
+            canAssignCases = true;
+            canEditAnonymizedSummary = false;
         }
 
         applyCaseAccessMode(false);
@@ -564,6 +603,8 @@ function initHrCaseDetailPage() {
         const updates = data.data?.updates || [];
         const audit = data.data?.audit || [];
         const coInvestigators = data.data?.co_investigators || [];
+        currentCaseReport = detail;
+        latestReporterFeedbackValue = getLatestAuditFieldValue(audit, 'reporter_feedback', detail.reporter_feedback || '');
         const isCoInvestigatorCase = coInvestigators
             .some((ci) => String(ci.user_id || '').trim() !== '' && String(ci.user_id || '').trim() === currentUserId);
         renderCaseSummary(detail, attachments, updates, audit);
@@ -695,28 +736,8 @@ function initHrCaseDetailPage() {
         }
     });
 
-    updateForm?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        if (isCaseReadOnly) {
-            const message = currentUserRole === 'ethics'
-                ? 'Ethics Office cannot edit cases.'
-                : 'Co-investigators can view this case but cannot edit it.';
-            showNotification(message, 'warning');
-            return;
-        }
-        const formData = new FormData(updateForm);
-        const ref = getFormString(formData, 'reference_no');
-        if (!ref) {
-            showNotification('Reference is required.', 'warning');
-            return;
-        }
-
-        const acknowledge = !!formData.get('acknowledge');
+    const readUpdateDraft = (formData) => {
         const status = getFormString(formData, 'status');
-        const anonymizedSummaryValue = formData.get('anonymized_summary');
-        const anonymizedSummary = typeof anonymizedSummaryValue === 'string'
-            ? anonymizedSummaryValue.trim()
-            : '';
         const reporterFeedbackValue = formData.get('reporter_feedback');
         const reporterFeedback = typeof reporterFeedbackValue === 'string'
             ? reporterFeedbackValue.trim()
@@ -729,41 +750,93 @@ function initHrCaseDetailPage() {
         const outcomeComments = typeof outcomeCommentsValue === 'string'
             ? outcomeCommentsValue.trim()
             : '';
+        const anonymizedSummaryValue = formData.get('anonymized_summary');
+        const anonymizedSummary = typeof anonymizedSummaryValue === 'string'
+            ? anonymizedSummaryValue.trim()
+            : '';
 
-        if (!acknowledge) {
-            showNotification('Acknowledge Case is required before saving.', 'warning');
-            hrOutput.classList.add('d-none');
-            return;
-        }
-
-        const completedFieldError = getCompletedFieldError(status, formData.get('stage'), {
-            anonymized_summary: anonymizedSummary,
-            reporter_feedback: reporterFeedback,
-            action_taken: actionTaken,
-            outcome_comments: outcomeComments,
-        });
-        if (completedFieldError) {
-            showNotification(completedFieldError, 'warning');
-            hrOutput.classList.add('d-none');
-            return;
-        }
-
-        const payload = {
-            priority: formData.get('priority'),
-            stage: formData.get('stage'),
+        return {
+            ref: getFormString(formData, 'reference_no'),
+            acknowledge: !!formData.get('acknowledge'),
             status,
+            stage: formData.get('stage'),
+            priority: formData.get('priority'),
             province: formData.get('province') || null,
-            ...(canAssignCases ? { assigned_to_user_id: formData.get('assigned_to_user_id') || null } : {}),
-            ...(canEditAnonymizedSummary ? { anonymized_summary: anonymizedSummary } : {}),
-            reporter_feedback: reporterFeedback,
-            action_taken: actionTaken,
-            outcome_comments: outcomeComments,
-            internal_notes: formData.get('internal_notes'),
-            acknowledge: acknowledge ? 1 : 0,
+            assignedToUserId: formData.get('assigned_to_user_id') || null,
+            anonymizedSummary,
+            reporterFeedback,
+            actionTaken,
+            outcomeComments,
+            internalNotes: formData.get('internal_notes'),
         };
+    };
+
+    const getCaseUpdateValidationError = (draft) => {
+        if (!draft.ref) {
+            return 'Reference is required.';
+        }
+
+        if (!draft.acknowledge) {
+            return 'Acknowledge Case is required before saving.';
+        }
+
+        return getCompletedFieldError(draft.status, draft.stage, {
+            anonymized_summary: draft.anonymizedSummary,
+            reporter_feedback: draft.reporterFeedback,
+            action_taken: draft.actionTaken,
+            outcome_comments: draft.outcomeComments,
+        }, {
+            reporter_feedback: latestReporterFeedbackValue || currentCaseReport?.reporter_feedback || '',
+            action_taken: currentCaseReport?.action_taken || '',
+            outcome_comments: currentCaseReport?.outcome_comments || '',
+        });
+    };
+
+    const buildCaseUpdatePayload = (draft) => {
+        const normalizedReporterFeedback = draft.reporterFeedback.trim();
+        const previouslySavedReporterFeedback = String(latestReporterFeedbackValue || currentCaseReport?.reporter_feedback || '').trim();
+        const shouldSendReporterFeedback = normalizedReporterFeedback !== ''
+            && normalizedReporterFeedback.toLowerCase() !== previouslySavedReporterFeedback.toLowerCase();
+
+        return {
+            priority: draft.priority,
+            stage: draft.stage,
+            status: draft.status,
+            province: draft.province,
+            ...(canAssignCases ? { assigned_to_user_id: draft.assignedToUserId } : {}),
+            ...(canEditAnonymizedSummary ? { anonymized_summary: draft.anonymizedSummary } : {}),
+            ...(shouldSendReporterFeedback ? { reporter_feedback: normalizedReporterFeedback } : {}),
+            action_taken: draft.actionTaken,
+            outcome_comments: draft.outcomeComments,
+            internal_notes: draft.internalNotes,
+            acknowledge: draft.acknowledge ? 1 : 0,
+        };
+    };
+
+    updateForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (isCaseReadOnly) {
+            const message = currentUserRole === 'ethics'
+                ? 'Ethics Office cannot edit cases.'
+                : 'Co-investigators can view this case but cannot edit it.';
+            showNotification(message, 'warning');
+            return;
+        }
+
+        const formData = new FormData(updateForm);
+        const draft = readUpdateDraft(formData);
+        const validationError = getCaseUpdateValidationError(draft);
+
+        if (validationError) {
+            showNotification(validationError, 'warning');
+            hrOutput.classList.add('d-none');
+            return;
+        }
+
+        const payload = buildCaseUpdatePayload(draft);
 
         try {
-            await api(`${API_BASE}/hr/cases/${encodeURIComponent(ref)}`, {
+            await api(`${API_BASE}/hr/cases/${encodeURIComponent(draft.ref)}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),

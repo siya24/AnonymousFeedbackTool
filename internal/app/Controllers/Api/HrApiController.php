@@ -17,6 +17,8 @@ final class HrApiController
 {
     private const ASSIGNMENT_ROLE_CASE_MANAGER = 'Case Manager';
     private const MSG_CO_INVESTIGATOR_READ_ONLY = 'Co-investigators can view this case but cannot edit it.';
+    private const AUTH_COOKIE_NAME = 'hr_auth_token';
+    private const CSRF_COOKIE_NAME = 'hr_csrf_token';
 
     private FeedbackService $feedbackService;
     private HrLdapUserService $hrLdapUserService;
@@ -50,7 +52,36 @@ final class HrApiController
         );
     }
 
-    
+    private function writeAuthCookies(string $token): string
+    {
+        $secureCookie = (
+            (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+            || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443'
+            || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https'
+        );
+        $expiresIn = (int) (getenv('JWT_EXPIRES_IN') ?: ($_ENV['JWT_EXPIRES_IN'] ?? 28800));
+        $expiresAt = time() + max(300, $expiresIn);
+        $csrfToken = bin2hex(random_bytes(32));
+
+        setcookie(self::AUTH_COOKIE_NAME, $token, [
+            'expires' => $expiresAt,
+            'path' => '/',
+            'secure' => $secureCookie,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+        setcookie(self::CSRF_COOKIE_NAME, $csrfToken, [
+            'expires' => $expiresAt,
+            'path' => '/',
+            'secure' => $secureCookie,
+            'httponly' => false,
+            'samesite' => 'Lax',
+        ]);
+
+        return $csrfToken;
+    }
+
+
     public function login(): void
     {
         $input = Request::input();
@@ -105,10 +136,11 @@ final class HrApiController
             'can_assign_cases' => $canAssignCases,
             'is_case_manager' => $isCaseManager ? 1 : 0,
         ]);
+        $csrfToken = $this->writeAuthCookies($token);
 
         Response::json([
             'message' => 'Login successful',
-            'token' => $token,
+            'csrf_token' => $csrfToken,
             'user' => [
                 'id' => $userId,
                 'name' => $user['name'],
@@ -171,7 +203,70 @@ final class HrApiController
     
     public function logout(): void
     {
+        $secureCookie = (
+            (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+            || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443'
+            || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https'
+        );
+        setcookie(self::AUTH_COOKIE_NAME, '', [
+            'expires' => time() - 3600,
+            'path' => '/',
+            'secure' => $secureCookie,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+        setcookie(self::CSRF_COOKIE_NAME, '', [
+            'expires' => time() - 3600,
+            'path' => '/',
+            'secure' => $secureCookie,
+            'httponly' => false,
+            'samesite' => 'Lax',
+        ]);
         Response::json(['message' => 'Logged out successfully']);
+    }
+
+    public function refresh(): void
+    {
+        try {
+            $this->auth->authenticate();
+            $this->auth->requireAnyRole(Authorization::CONSOLE_ROLES);
+
+            $user = $this->auth->getUser() ?? [];
+            $userId = (string) ($user['user_id'] ?? '');
+            $name = (string) ($user['name'] ?? '');
+            $email = (string) ($user['email'] ?? '');
+            $role = strtolower(trim((string) ($user['role'] ?? Authorization::ROLE_HR)));
+
+            $canAssignCases = $this->userCanAssignCases($userId) ? 1 : 0;
+            $isCaseManager = $this->userHasAssignmentRole($userId, self::ASSIGNMENT_ROLE_CASE_MANAGER);
+
+            $jwt = Container::get('jwt');
+            $token = $jwt->encode([
+                'user_id' => $userId,
+                'email' => $email,
+                'name' => $name,
+                'role' => $role,
+                'can_assign_cases' => $canAssignCases,
+                'is_case_manager' => $isCaseManager ? 1 : 0,
+            ]);
+            $csrfToken = $this->writeAuthCookies($token);
+
+            Response::json([
+                'message' => 'Session refreshed',
+                'csrf_token' => $csrfToken,
+                'user' => [
+                    'id' => $userId,
+                    'name' => $name,
+                    'email' => $email,
+                    'role' => $role,
+                    'can_assign_cases' => $canAssignCases,
+                    'is_case_manager' => $isCaseManager,
+                ],
+            ]);
+        } catch (\RuntimeException $e) {
+            $code = (int) ($e->getCode() ?: 400);
+            Response::json(['error' => $e->getMessage()], $code);
+        }
     }
 
     
@@ -308,6 +403,11 @@ final class HrApiController
     public function dbIdentity(): void
     {
         try {
+            $diagnosticsEnabled = filter_var(getenv('ALLOW_DB_IDENTITY_ENDPOINT') ?: 'false', FILTER_VALIDATE_BOOLEAN);
+            if (!$diagnosticsEnabled) {
+                Response::json(['error' => 'Not found'], 404);
+            }
+
             $this->auth->authenticate();
             $this->auth->requireAnyRole(Authorization::CONSOLE_ROLES);
 

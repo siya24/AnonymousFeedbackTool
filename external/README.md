@@ -167,9 +167,9 @@ GET /api/reports?category=Discrimination&status=Investigation%20completed
 Response: { data: [{ reference_no, category, status, ... }] }
 ```
 
-### HR/Ethics Endpoints (JWT Authentication)
+### HR/Ethics Endpoints (Cookie Session + CSRF)
 
-#### Login & Get Token
+#### Login & Start Session
 ```http
 POST /api/hr/login
 Content-Type: application/json
@@ -179,13 +179,14 @@ Content-Type: application/json
   "password": "CHANGE_ME_PASSWORD"
 }
 
-Response: { token: "eyJhbGc...", user: { id, name, email, role } }
+Response: { csrf_token: "...", user: { id, name, email, role } }
+Note: Server sets HttpOnly auth cookie and CSRF cookie.
 ```
 
 #### List Cases (Requires HR or Ethics role)
 ```http
 GET /api/hr/cases?status=Investigation%20pending
-Authorization: Bearer {JWT_TOKEN}
+Cookie: hr_auth_token=... (set by login)
 
 Response: { data: [{ id, reference_no, category, status, ... }] }
 ```
@@ -193,7 +194,7 @@ Response: { data: [{ id, reference_no, category, status, ... }] }
 #### Get Case Detail (Requires HR or Ethics role)
 ```http
 GET /api/hr/cases/AF-20260423-ABC123
-Authorization: Bearer {JWT_TOKEN}
+Cookie: hr_auth_token=... (set by login)
 
 Response: { data: { report, updates, attachments, audit } }
 ```
@@ -202,7 +203,8 @@ Response: { data: { report, updates, attachments, audit } }
 ```http
 POST /api/hr/cases/AF-20260423-ABC123
 Content-Type: application/json
-Authorization: Bearer {JWT_TOKEN}
+Cookie: hr_auth_token=... (set by login)
+X-CSRF-Token: {hr_csrf_token}
 
 {
   "priority": "High",
@@ -216,7 +218,7 @@ Response: { success: true, message: "..." }
 #### Get Current User
 ```http
 GET /api/hr/me
-Authorization: Bearer {JWT_TOKEN}
+Cookie: hr_auth_token=... (set by login)
 
 Response: { user: { id, name, email, role } }
 ```
@@ -224,15 +226,16 @@ Response: { user: { id, name, email, role } }
 #### Logout
 ```http
 POST /api/hr/logout
-Authorization: Bearer {JWT_TOKEN}
+Cookie: hr_auth_token=... (set by login)
+X-CSRF-Token: {hr_csrf_token}
 
 Response: { message: "Logged out" }
-Note: Client removes JWT from localStorage
+Note: Server clears auth and CSRF cookies
 ```
 
 ## Security Features
 
-✅ **JWT Token-Based Auth** - Stateless, scalable authentication  
+✅ **HttpOnly Cookie Auth + CSRF** - Session token protected from JavaScript access and validated on state changes  
 ✅ **Password Hashing** - bcrypt with automatic salting  
 ✅ **Role-Based Access** - HR and Ethics roles with different permissions  
 ✅ **SQL Injection Prevention** - PDO prepared statements  
@@ -256,6 +259,7 @@ curl -X POST http://localhost:8084/api/feedback \
 ```bash
 curl -X POST http://localhost:8083/api/hr/login \
   -H "Content-Type: application/json" \
+  -c hr.cookies \
   -d '{
     "email": "hr@organization.com",
     "password": "CHANGE_ME_PASSWORD"
@@ -264,9 +268,8 @@ curl -X POST http://localhost:8083/api/hr/login \
 
 ### Test Protected Endpoint
 ```bash
-TOKEN="eyJhbGc..." # from login response
 curl -X GET http://localhost:8083/api/hr/cases \
-  -H "Authorization: Bearer $TOKEN"
+  -b hr.cookies
 ```
 
 ## Frontend
@@ -277,12 +280,12 @@ curl -X GET http://localhost:8083/api/hr/cases \
 - **Reporting**: View anonymized summaries of reported issues
 
 ### HR Console
-- **Login**: Authenticate with email and password (generates JWT token)
+- **Login**: Authenticate with email and password (server-issued cookie session)
 - **Case Management**: View, filter, and search feedback cases
 - **Case Details**: Read full case information with updates and attachments
 - **Case Update**: Update priority, status, notes, and outcomes (HR only)
 
-JavaScript handles JWT token storage and all API interactions.
+JavaScript handles CSRF token forwarding and all API interactions.
 
 ## Development
 
@@ -325,10 +328,11 @@ $router->add('GET', '/api/endpoint', [FeedbackApiController::class, 'endpoint'])
 | Issue | Solution |
 |-------|----------|
 | Database connection error | Ensure MySQL running, check credentials in config/database.php |
-| JWT token invalid | Check JWT_SECRET env var, verify token not expired (24 hrs) |
+| Session invalid or expired | Log in again to refresh auth and CSRF cookies |
 | Permission denied | Verify user role in users table, check endpoint requires correct role |
 | File upload fails | Ensure uploads/ directory exists with write permissions |
-| 401 Unauthorized | Include valid JWT token in Authorization: Bearer header |
+| 401 Unauthorized | Ensure hr_auth_token cookie is present and unexpired |
+| 419 Invalid CSRF token | Ensure X-CSRF-Token header matches hr_csrf_token cookie for write calls |
 
 ## Compliance
 

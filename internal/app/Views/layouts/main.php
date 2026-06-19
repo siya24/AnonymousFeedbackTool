@@ -44,6 +44,24 @@ $navAriaCurrent = static function (array $paths) use ($isActivePath): string {
     return $isActivePath($paths) ? ' aria-current="page"' : '';
 };
 
+$assetUrl = static function (string $assetPath): string {
+    $resolved = $assetPath;
+
+    if ($assetPath !== '' && $assetPath[0] === '/') {
+        $internalRoot = dirname(__DIR__, 3);
+        $diskPath = $internalRoot . str_replace('/', DIRECTORY_SEPARATOR, $assetPath);
+        if (is_file($diskPath)) {
+            $version = (string) filemtime($diskPath);
+            if ($version !== '' && $version !== '0') {
+                $separator = str_contains($assetPath, '?') ? '&' : '?';
+                $resolved = $assetPath . $separator . 'v=' . rawurlencode($version);
+            }
+        }
+    }
+
+    return $resolved;
+};
+
 $adminListsCssAsset = '/public/assets/css/pages/hr-admin-lists.page.css';
 $sharedCssAssets = [
     '/public/assets/css/app.css',
@@ -90,15 +108,15 @@ if ($requestPath === $homePath || $requestPath === $legacyDashboardPath) {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= htmlspecialchars($title ?? 'Anonymous Feedback Tool', ENT_QUOTES, 'UTF-8') ?></title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="<?= htmlspecialchars($assetUrl('/public/assets/vendor/bootstrap/css/bootstrap.min.css'), ENT_QUOTES, 'UTF-8') ?>" rel="stylesheet">
+    <link href="<?= htmlspecialchars($assetUrl('/public/assets/vendor/fontawesome/css/all.min.css'), ENT_QUOTES, 'UTF-8') ?>" rel="stylesheet">
     <?php foreach ($sharedCssAssets as $asset): ?>
-    <link rel="stylesheet" href="<?= htmlspecialchars($asset, ENT_QUOTES, 'UTF-8') ?>">
+    <link rel="stylesheet" href="<?= htmlspecialchars($assetUrl($asset), ENT_QUOTES, 'UTF-8') ?>">
     <?php endforeach; ?>
     <?php foreach ($pageCssAssets as $asset): ?>
-    <link rel="stylesheet" href="<?= htmlspecialchars($asset, ENT_QUOTES, 'UTF-8') ?>">
+    <link rel="stylesheet" href="<?= htmlspecialchars($assetUrl($asset), ENT_QUOTES, 'UTF-8') ?>">
     <?php endforeach; ?>
-    <link rel="icon" type="image/x-icon" href="/public/favicon.ico">
+    <link rel="icon" type="image/x-icon" href="<?= htmlspecialchars($assetUrl('/public/favicon.ico'), ENT_QUOTES, 'UTF-8') ?>">
 </head>
 <body>
 <?php if ($requestPath === $homePath || $requestPath === $legacyDashboardPath): ?>
@@ -106,32 +124,19 @@ if ($requestPath === $homePath || $requestPath === $legacyDashboardPath) {
 (() => {
     const homePath = <?= json_encode($homePath, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
     const currentPath = <?= json_encode($requestPath, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+    const getCookieValue = (name) => {
+        const escaped = String(name || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const match = document.cookie.match(new RegExp(`(?:^|; )${escaped}=([^;]*)`));
+        return match ? decodeURIComponent(match[1]) : '';
+    };
 
     try {
-        const token = globalThis.localStorage?.getItem('hr_token');
-        if (!token) {
+        const csrfCookie = getCookieValue('hr_csrf_token');
+        if (!csrfCookie) {
             globalThis.location.replace(`/hr/login?return_to=${encodeURIComponent(homePath)}`);
             return;
         }
-
-        const parts = String(token).split('.');
-        if (parts.length === 3) {
-            const base64Url = parts[1].replaceAll('-', '+').replaceAll('_', '/');
-            const padding = base64Url.length % 4;
-            const padded = padding === 0 ? base64Url : `${base64Url}${'='.repeat(4 - padding)}`;
-            const payload = JSON.parse(globalThis.atob(padded));
-            const exp = Number(payload?.exp || 0);
-            const now = Math.floor(Date.now() / 1000);
-            const leewaySeconds = 60;
-
-            if (Number.isFinite(exp) && exp > 0 && exp <= (now - leewaySeconds)) {
-                globalThis.localStorage.removeItem('hr_token');
-                globalThis.location.replace(`/hr/login?return_to=${encodeURIComponent(homePath)}`);
-                return;
-            }
-        }
     } catch {
-        globalThis.localStorage?.removeItem('hr_token');
         globalThis.location.replace(`/hr/login?return_to=${encodeURIComponent(homePath)}`);
         return;
     }
@@ -197,12 +202,12 @@ if ($requestPath === $homePath || $requestPath === $legacyDashboardPath) {
         <p class="mb-0"><i class="fas fa-lock me-2"></i>All data is encrypted and confidential. No personal identifiers are collected.</p>
     </div>
 </footer>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="<?= htmlspecialchars($assetUrl('/public/assets/vendor/bootstrap/js/bootstrap.bundle.min.js'), ENT_QUOTES, 'UTF-8') ?>"></script>
 <?php foreach ($sharedJsAssets as $asset): ?>
-<script src="<?= htmlspecialchars($asset, ENT_QUOTES, 'UTF-8') ?>" defer></script>
+<script src="<?= htmlspecialchars($assetUrl($asset), ENT_QUOTES, 'UTF-8') ?>" defer></script>
 <?php endforeach; ?>
 <?php foreach ($pageJsAssets as $asset): ?>
-<script src="<?= htmlspecialchars($asset, ENT_QUOTES, 'UTF-8') ?>" defer></script>
+<script src="<?= htmlspecialchars($assetUrl($asset), ENT_QUOTES, 'UTF-8') ?>" defer></script>
 <?php endforeach; ?>
 </body>
 </html>

@@ -78,38 +78,8 @@ class JwtService {
 
     
     public static function getBearerToken(): ?string {
-        $headers = [
-            (string) ($_SERVER['HTTP_AUTHORIZATION'] ?? ''),
-            (string) ($_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? ''),
-            (string) ($_SERVER['Authorization'] ?? ''),
-            (string) ($_SERVER['HTTP_X_AUTHORIZATION'] ?? ''),
-            (string) ($_SERVER['HTTP_X_HR_TOKEN'] ?? ''),
-        ];
-
-        if (function_exists('apache_request_headers')) {
-            $requestHeaders = apache_request_headers();
-            if (is_array($requestHeaders)) {
-                foreach ($requestHeaders as $key => $value) {
-                    if (strtolower((string) $key) === 'authorization') {
-                        $headers[] = (string) $value;
-                    }
-                }
-            }
-        }
-
-        $header = '';
-        foreach ($headers as $candidate) {
-            if (trim($candidate) !== '') {
-                $header = $candidate;
-                break;
-            }
-        }
-
-        if (preg_match('/Bearer\s+(\S+)/i', $header, $matches)) {
-            return $matches[1];
-        }
-
-        return trim($header) !== '' ? trim($header) : null;
+        $cookieToken = trim((string) ($_COOKIE['hr_auth_token'] ?? ''));
+        return $cookieToken !== '' ? $cookieToken : null;
     }
 
     private function base64UrlEncode(string $data): string {

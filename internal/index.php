@@ -152,6 +152,36 @@ function isLocalReportsBypassEnabled(): bool
     return $ip === '127.0.0.1' || $ip === '::1';
 }
 
+function isStateChangingMethod(string $method): bool
+{
+    return in_array(strtoupper($method), ['POST', 'PUT', 'PATCH', 'DELETE'], true);
+}
+
+function shouldValidateHrCsrf(string $path, string $method): bool
+{
+    if (!str_starts_with($path, '/api/hr') || !isStateChangingMethod($method)) {
+        return false;
+    }
+
+    return $path !== '/api/hr/login';
+}
+
+function csrfHeaderToken(): string
+{
+    return trim((string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
+}
+
+function isValidHrCsrfRequest(): bool
+{
+    $cookieToken = trim((string) ($_COOKIE['hr_csrf_token'] ?? ''));
+    $headerToken = csrfHeaderToken();
+    if ($cookieToken === '' || $headerToken === '') {
+        return false;
+    }
+
+    return hash_equals($cookieToken, $headerToken);
+}
+
 
 if (str_starts_with(\App\Core\Request::path(), '/uploads')) {
     http_response_code(403);
@@ -178,6 +208,7 @@ if (!$isFullMode && (
 }
 
 $path = Request::path();
+$method = Request::method();
 $adProtected = ($path === '/anonymized/reports' || $path === '/api/reports');
 if ($adProtected && !(isLocalReportsBypassEnabled() || hasPassiveDomainIdentity() || isIntranetOrVpnClient())) {
     http_response_code(403);
@@ -188,6 +219,13 @@ if ($adProtected && !(isLocalReportsBypassEnabled() || hasPassiveDomainIdentity(
         header('Content-Type: text/plain; charset=utf-8');
         echo 'Forbidden. This page is available to domain/intranet/VPN employees only.';
     }
+    exit;
+}
+
+if (shouldValidateHrCsrf($path, $method) && !isValidHrCsrfRequest()) {
+    http_response_code(419);
+    header(JSON_CONTENT_TYPE);
+    echo json_encode(['error' => 'Invalid or missing CSRF token.']);
     exit;
 }
 
@@ -215,6 +253,7 @@ $router->add('GET', '/hr/personnel-roles', [PageController::class, 'hrPersonnelR
 
 $router->add('POST', '/api/hr/login', [HrApiController::class, 'login']);
 $router->add('POST', '/api/hr/logout', [HrApiController::class, 'logout']);
+$router->add('POST', '/api/hr/refresh', [HrApiController::class, 'refresh']);
 $router->add('GET', '/api/hr/me', [HrApiController::class, 'getCurrentUser']);
 $router->add('GET', '/api/hr/db-identity', [HrApiController::class, 'dbIdentity']);
 $router->add('GET', '/api/hr/cases', [HrApiController::class, 'listCases']);
@@ -252,4 +291,4 @@ $router->add('POST', '/api/hr/roles', [HrRoleApiController::class, 'create']);
 $router->add('PUT', ROUTE_HR_ROLES_ID, [HrRoleApiController::class, 'update']);
 $router->add('DELETE', ROUTE_HR_ROLES_ID, [HrRoleApiController::class, 'delete']);
 
-$router->dispatch(Request::method(), Request::path());
+$router->dispatch($method, $path);

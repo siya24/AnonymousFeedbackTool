@@ -165,19 +165,19 @@ function initHrConsolePage() {
                 body: JSON.stringify(payload),
             });
 
-            if (!data?.token) {
+            if (!data?.user || typeof data.user !== 'object') {
                 const payloadPreview = typeof data === 'string'
                     ? data.slice(0, 240)
                     : JSON.stringify(data ?? null).slice(0, 240);
-                throw new Error(`Login response missing token. Server payload: ${payloadPreview}`);
+                throw new Error(`Login response missing user payload. Server payload: ${payloadPreview}`);
             }
 
-            TokenManager.setToken(data.token);
+            if (typeof data?.csrf_token === 'string' && data.csrf_token.trim() !== '') {
+                TokenManager.setCsrfToken(data.csrf_token);
+            }
 
             let userName = '';
-            if (data?.user && typeof data.user === 'object') {
-                userName = String(data.user.name || data.user.email || '').trim();
-            }
+            userName = String(data.user.name || data.user.email || '').trim();
 
             if (!userName) {
                 try {

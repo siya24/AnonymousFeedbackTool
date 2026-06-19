@@ -1,10 +1,16 @@
 <?php
 declare(strict_types=1);
 
+$driver = getenv('DB_DRIVER') ?: 'mysql';
+$port = getenv('DB_PORT');
+if ($port === false || $port === '') {
+    $port = strtolower((string) $driver) === 'sqlsrv' ? '' : '3306';
+}
+
 return [
-    'driver' => getenv('DB_DRIVER') ?: 'mysql',
+    'driver' => $driver,
     'host' => getenv('DB_HOST') ?: '127.0.0.1',
-    'port' => getenv('DB_PORT') ?: '3306',
+    'port' => $port,
     'database' => getenv('DB_DATABASE') ?: 'anonymous_feedback_tool',
     'username' => getenv('DB_USERNAME') ?: '',
     'password' => getenv('DB_PASSWORD') ?: '',

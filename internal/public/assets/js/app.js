@@ -3,7 +3,13 @@ const API_BASE = '/api';
 const escHtml = (str) => String(str).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 const APP_NOTIFICATION_MODAL_ID = 'app-notification-modal';
 const APP_BUSY_OVERLAY_ID = 'app-busy-overlay';
+const HR_CSRF_COOKIE_NAME = 'hr_csrf_token';
+const HR_TOKEN_KEEPALIVE_INTERVAL_MS = 120000;
+const HR_ACTIVITY_REFRESH_COOLDOWN_MS = 60000;
 let appPendingWriteRequests = 0;
+let hrTokenRefreshPromise = null;
+let hrSessionKeepaliveInstalled = false;
+let lastHrActivityRefreshAt = 0;
 
 const formatAssignedTo = (assignedRoleName, assignedToName, assignedToEmail) => {
     if (assignedRoleName) {
@@ -22,49 +28,155 @@ const getFormString = (formData, fieldName) => {
     return typeof value === 'string' ? value.trim() : '';
 };
 
-const decodeJwtPayload = (token) => {
-    const parts = String(token || '').split('.');
-    if (parts.length !== 3) {
-        return null;
+const readCookie = (name) => {
+    const key = String(name || '').trim();
+    if (!key) {
+        return '';
     }
 
-    const base64Url = parts[1].replaceAll('-', '+').replaceAll('_', '/');
-    const padding = base64Url.length % 4;
-    const padded = padding === 0 ? base64Url : `${base64Url}${'='.repeat(4 - padding)}`;
+    const entries = document.cookie.split(';');
+    for (const entry of entries) {
+        const [rawName, ...valueParts] = entry.split('=');
+        if (String(rawName || '').trim() !== key) {
+            continue;
+        }
 
-    try {
-        return JSON.parse(atob(padded));
-    } catch {
-        return null;
+        return decodeURIComponent(valueParts.join('='));
     }
+
+    return '';
+};
+
+const writeCookie = (name, value, maxAgeSeconds = 28800) => {
+    const secure = globalThis.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${Math.max(0, Number(maxAgeSeconds) || 0)}; SameSite=Lax${secure}`;
+};
+
+const clearCookie = (name) => {
+    const secure = globalThis.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
 };
 
 const TokenManager = {
-    getToken: () => {
-        const token = localStorage.getItem('hr_token');
-        if (!token) {
-            return null;
+    getCsrfToken: () => readCookie(HR_CSRF_COOKIE_NAME),
+    setCsrfToken: (token) => {
+        if (typeof token === 'string' && token.trim() !== '') {
+            writeCookie(HR_CSRF_COOKIE_NAME, token.trim());
+            return;
         }
 
-        const payload = decodeJwtPayload(token);
-        if (!payload || typeof payload !== 'object') {
-            // If client-side decode fails, defer validation to the API instead of forcing logout.
-            return token;
-        }
-
-        const exp = Number(payload?.exp || 0);
-        const now = Math.floor(Date.now() / 1000);
-        const leewaySeconds = 60;
-        if (Number.isFinite(exp) && exp > 0 && exp <= (now - leewaySeconds)) {
-            localStorage.removeItem('hr_token');
-            return null;
-        }
-
-        return token;
+        clearCookie(HR_CSRF_COOKIE_NAME);
     },
-    setToken: (token) => localStorage.setItem('hr_token', token),
-    clearToken: () => localStorage.removeItem('hr_token'),
-    hasToken: () => !!TokenManager.getToken()
+    clearCsrfToken: () => clearCookie(HR_CSRF_COOKIE_NAME),
+    clearToken: () => {
+        clearCookie(HR_CSRF_COOKIE_NAME);
+    },
+    hasToken: () => !!TokenManager.getCsrfToken()
+};
+
+const parsePathname = (url) => {
+    try {
+        return new URL(url, globalThis.location.origin).pathname || '';
+    } catch {
+        return '';
+    }
+};
+
+const isHrApiPath = (path) => path.startsWith('/api/hr/');
+const isHrAuthEndpointPath = (path) => {
+    return path === '/api/hr/login' || path === '/api/hr/logout' || path === '/api/hr/refresh';
+};
+
+const refreshHrToken = async ({ force = false } = {}) => {
+    const csrfToken = TokenManager.getCsrfToken();
+    if (!csrfToken) {
+        return null;
+    }
+
+    if (!force) {
+        return csrfToken;
+    }
+
+    if (hrTokenRefreshPromise) {
+        return hrTokenRefreshPromise;
+    }
+
+    hrTokenRefreshPromise = (async () => {
+        const csrfAtRequestStart = TokenManager.getCsrfToken();
+        if (!csrfAtRequestStart) {
+            return null;
+        }
+
+        const response = await fetch(`${API_BASE}/hr/refresh`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                ...(csrfAtRequestStart ? { 'X-CSRF-Token': csrfAtRequestStart } : {}),
+            }
+        });
+
+        const payload = await parseApiResponseBody(`${API_BASE}/hr/refresh`, response);
+        const data = ensureApiSuccess(`${API_BASE}/hr/refresh`, response, payload);
+        const nextToken = typeof data?.token === 'string' ? data.token.trim() : '';
+        const nextCsrfToken = typeof data?.csrf_token === 'string' ? data.csrf_token.trim() : '';
+
+        if (nextCsrfToken) {
+            TokenManager.setCsrfToken(nextCsrfToken);
+        }
+
+        globalThis._navAuthUpdate?.(true);
+        return nextCsrfToken || (nextToken || csrfAtRequestStart);
+    })();
+
+    try {
+        return await hrTokenRefreshPromise;
+    } finally {
+        hrTokenRefreshPromise = null;
+    }
+};
+
+const maybeRefreshHrTokenForRequest = async (url) => {
+    const path = parsePathname(String(url || ''));
+    if (!isHrApiPath(path) || isHrAuthEndpointPath(path)) {
+        return;
+    }
+
+    await refreshHrToken();
+};
+
+const installHrSessionKeepalive = () => {
+    if (hrSessionKeepaliveInstalled) {
+        return;
+    }
+
+    hrSessionKeepaliveInstalled = true;
+
+    const maybeRefreshFromActivity = () => {
+        const nowMs = Date.now();
+        if (nowMs - lastHrActivityRefreshAt < HR_ACTIVITY_REFRESH_COOLDOWN_MS) {
+            return;
+        }
+
+        lastHrActivityRefreshAt = nowMs;
+        refreshHrToken({ force: true }).catch(() => {});
+    };
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            maybeRefreshFromActivity();
+        }
+    });
+
+    globalThis.addEventListener('focus', maybeRefreshFromActivity);
+    document.addEventListener('click', maybeRefreshFromActivity, { passive: true });
+    document.addEventListener('keydown', maybeRefreshFromActivity);
+
+    globalThis.setInterval(() => {
+        if (document.visibilityState !== 'visible') {
+            return;
+        }
+        refreshHrToken({ force: true }).catch(() => {});
+    }, HR_TOKEN_KEEPALIVE_INTERVAL_MS);
 };
 
 const buildHrLoginRedirectUrl = () => {
@@ -140,7 +252,8 @@ const ensureApiSuccess = (url, response, payload) => {
 };
 
 async function api(url, options = {}) {
-    const token = TokenManager.getToken();
+    await maybeRefreshHrTokenForRequest(url);
+    const csrfToken = TokenManager.getCsrfToken();
     const method = (options.method || 'GET').toString().toUpperCase();
     const isWriteRequest = method !== 'GET' && method !== 'HEAD';
 
@@ -154,9 +267,9 @@ async function api(url, options = {}) {
             ...options,
             headers: {
                 ...options.headers,
-                ...(token && {
-                    'X-HR-Token': token,
-                })
+                ...(isWriteRequest && csrfToken ? {
+                    'X-CSRF-Token': csrfToken,
+                } : {}),
             }
         });
         const payload = await parseApiResponseBody(url, response);
@@ -166,6 +279,10 @@ async function api(url, options = {}) {
             setBusyOverlayVisible(false);
         }
     }
+}
+
+if ((globalThis.location.pathname || '').startsWith('/hr')) {
+    installHrSessionKeepalive();
 }
 
 function createBusyOverlay() {

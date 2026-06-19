@@ -14,7 +14,17 @@ spl_autoload_register(function (string $class): void {
     }
 });
 
+$isHttpsRequest = (
+    (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+    || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443'
+    || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https'
+);
+
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    ini_set('session.cookie_secure', '1');
+    ini_set('session.cookie_httponly', '1');
+    ini_set('session.cookie_samesite', 'Lax');
+    ini_set('session.use_strict_mode', '1');
     session_start();
 }
 
@@ -57,6 +67,17 @@ if (file_exists($envPath)) {
 header('X-Frame-Options: DENY');
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: strict-origin-when-cross-origin');
+header('X-Permitted-Cross-Domain-Policies: none');
+header('Cross-Origin-Opener-Policy: same-origin');
+header('Cross-Origin-Resource-Policy: same-origin');
+header('Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=(), usb=()');
+if ($isHttpsRequest) {
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+}
+
+$defaultCsp = "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; form-action 'self'";
+$cspPolicy = trim((string) (getenv('CSP_POLICY') ?: ''));
+header('Content-Security-Policy: ' . ($cspPolicy !== '' ? $cspPolicy : $defaultCsp));
 
 $config = [
     'app' => require_once __DIR__ . '/../config/app.php',

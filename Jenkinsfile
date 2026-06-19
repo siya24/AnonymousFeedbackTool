@@ -100,6 +100,21 @@ pipeline {
             }
         }
 
+        stage('Verify Internal Vendor Assets') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh 'sh scripts/verify_internal_vendor_assets.sh'
+                    } else {
+                        powershell '''
+                            $ErrorActionPreference = "Stop"
+                            & .\scripts\verify_internal_vendor_assets.ps1
+                        '''
+                    }
+                }
+            }
+        }
+
         stage('Deploy Internal') {
             when {
                 expression {
@@ -279,6 +294,36 @@ pipeline {
                             }
                             if (-not $resp.data.ok) {
                                 throw "Smoke test failed. Storage health not OK at $url"
+                            }
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Smoke Test Internal API') {
+            when {
+                expression {
+                    def targetIncludesInternal = (params.DEPLOY_TARGET == 'internal' || params.DEPLOY_TARGET == 'both')
+                    return params.RUN_DEPLOY && targetIncludesInternal && (params.SMOKE_BASE_URL?.trim())
+                }
+            }
+            steps {
+                script {
+                    def baseUrl = params.SMOKE_BASE_URL.trim().replaceAll('/+$', '')
+                    if (isUnix()) {
+                        sh """
+                            set -e
+                            curl -fsS '${baseUrl}/api/categories' | grep -q '"data"'
+                        """
+                    } else {
+                        env.SMOKE_BASE_URL = baseUrl
+                        powershell '''
+                            $ErrorActionPreference = "Stop"
+                            $url = "$env:SMOKE_BASE_URL/api/categories"
+                            $resp = Invoke-RestMethod -Method Get -Uri $url -TimeoutSec 30
+                            if ($null -eq $resp -or $null -eq $resp.data) {
+                                throw "Smoke test failed. No JSON category data from $url"
                             }
                         '''
                     }

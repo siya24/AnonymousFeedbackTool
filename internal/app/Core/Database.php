@@ -46,10 +46,13 @@ final class Database
 
     private static function connectSqlServer(array $config, array $options): PDO
     {
+        $server = trim((string) ($config['host'] ?? ''));
+        $port = trim((string) ($config['port'] ?? ''));
+        $serverSpec = $port !== '' ? ($server . ',' . $port) : $server;
+
         $dsn = sprintf(
-            'sqlsrv:Server=%s,%s;Database=%s;TrustServerCertificate=%s;MultipleActiveResultSets=%s',
-            $config['host'],
-            $config['port'],
+            'sqlsrv:Server=%s;Database=%s;TrustServerCertificate=%s;MultipleActiveResultSets=%s',
+            $serverSpec,
             $config['database'],
             !empty($config['trust_server_certificate']) ? '1' : '0',
             !empty($config['multiple_active_result_sets']) ? '1' : '0'

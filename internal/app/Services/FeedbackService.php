@@ -173,15 +173,13 @@ class FeedbackService {
             throw new ValidationException('Acknowledge Case is required before saving', 400);
         }
 
-        $updateData = $this->normalizeReporterCommunicationFields($updateData);
+        $updateData = $this->normalizeReporterCommunicationFields($updateData, $report);
 
         
-        if ($updateData['acknowledge'] ?? false) {
+        if (($updateData['acknowledge'] ?? false) && empty($report['acknowledged_at'])) {
             $updateData['acknowledged_at'] = date(self::DATETIME_FORMAT);
-            unset($updateData['acknowledge']);
-        } else {
-            unset($updateData['acknowledge']);
         }
+        unset($updateData['acknowledge']);
 
         $assignmentChanged = false;
         $isReassignment = false;
@@ -194,6 +192,14 @@ class FeedbackService {
 
         if (array_key_exists('assigned_role_id', $updateData)) {
             $updateData = $this->resolveRoleAssignment($updateData, $report);
+        }
+
+        $incomingReporterFeedback = trim((string) ($updateData['reporter_feedback'] ?? ''));
+        $existingReporterFeedback = trim((string) ($report['reporter_feedback'] ?? ''));
+        if (array_key_exists('reporter_feedback', $updateData)
+            && $incomingReporterFeedback !== ''
+            && strcasecmp($incomingReporterFeedback, $existingReporterFeedback) === 0) {
+            unset($updateData['reporter_feedback']);
         }
 
         
@@ -263,17 +269,17 @@ class FeedbackService {
         return ['data' => $updateData, 'changed' => $changed, 'reassigned' => $reassigned, 'unassigned' => $unassigned];
     }
 
-    private function normalizeReporterCommunicationFields(array $updateData): array
+    private function normalizeReporterCommunicationFields(array $updateData, array $existingReport): array
     {
-        $statusValue = strtolower(trim((string) ($updateData['status'] ?? '')));
+        $statusValue = strtolower(trim((string) ($updateData['status'] ?? $existingReport['status'] ?? '')));
         $isCompletedStatus = str_contains($statusValue, 'completed');
-        $stageValue = strtolower(trim((string) ($updateData['stage'] ?? '')));
+        $stageValue = strtolower(trim((string) ($updateData['stage'] ?? $existingReport['stage'] ?? '')));
         $isClosedStage = str_contains($stageValue, 'closed');
 
-        $anonymizedSummary = trim((string) ($updateData['anonymized_summary'] ?? ''));
-        $reporterFeedback = trim((string) ($updateData['reporter_feedback'] ?? ''));
-        $actionTaken = trim((string) ($updateData['action_taken'] ?? ''));
-        $outcomeComments = trim((string) ($updateData['outcome_comments'] ?? ''));
+        $anonymizedSummary = trim((string) ($updateData['anonymized_summary'] ?? $existingReport['anonymized_summary'] ?? ''));
+        $reporterFeedback = trim((string) ($updateData['reporter_feedback'] ?? $existingReport['reporter_feedback'] ?? ''));
+        $actionTaken = trim((string) ($updateData['action_taken'] ?? $existingReport['action_taken'] ?? ''));
+        $outcomeComments = trim((string) ($updateData['outcome_comments'] ?? $existingReport['outcome_comments'] ?? ''));
 
         if ($anonymizedSummary === '') {
             throw new ValidationException('Anonymized Summary is required', 400);
